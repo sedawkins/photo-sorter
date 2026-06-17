@@ -132,11 +132,12 @@ def scan(source_folder: str, logger: logging.Logger):
             if lat is not None and lon is not None:
                 city, state_or_region, country = resolve_location(lat, lon)
 
-            parent_path = (
-                item.get("parentReference", {}).get("path", "")
-                .replace("/drive/root:", "")
-            )
+            parent_ref = item.get("parentReference", {})
+            parent_path = parent_ref.get("path", "").replace("/drive/root:", "")
             original_path = f"{parent_path}/{name}"
+
+            # Use the immediate parent folder name as context (e.g. "Amsterdam 2014")
+            folder_description = parent_ref.get("name") or parent_path.rstrip("/").rsplit("/", 1)[-1] or None
 
             coverage = metadata_coverage(photo_facet, location_facet)
             stats[{
@@ -168,6 +169,8 @@ def scan(source_folder: str, logger: logging.Logger):
                 "height": image_facet.get("height"),
                 "camera_make": photo_facet.get("cameraMake"),
                 "camera_model": photo_facet.get("cameraModel"),
+                "folder_description": folder_description,
+                "user_description": None,
                 "status": "scanned",
                 "processed_at": datetime.now(timezone.utc).isoformat(),
             }

@@ -34,10 +34,12 @@ def _init_schema(conn: sqlite3.Connection):
             country         TEXT,
             width           INTEGER,
             height          INTEGER,
-            camera_make     TEXT,
-            camera_model    TEXT,
-            status          TEXT,
-            processed_at    TEXT
+            camera_make        TEXT,
+            camera_model       TEXT,
+            folder_description TEXT,
+            user_description   TEXT,
+            status             TEXT,
+            processed_at       TEXT
         );
 
         CREATE UNIQUE INDEX IF NOT EXISTS idx_hash

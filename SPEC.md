@@ -112,6 +112,15 @@ Source folders are **never modified** — originals stay in place throughout.
 ```
 Shadow only contains photos that have GPS — no `Other` or `Unsorted` branches.
 
+### Folder description files
+
+Each destination folder gets a `_description.txt` file written alongside the photos:
+- Populated automatically from the source folder name(s) of photos in that folder
+  (e.g. if photos came from "Amsterdam 2014" and "Europe Trip", both are listed)
+- The user can edit this file freely to add context (e.g. "Brian's graduation from USC")
+- `user_description` in the database is updated to match when the location inference
+  tool is run, but the `.txt` file is the human-readable version
+
 ---
 
 ## Duplicate Handling
@@ -170,10 +179,12 @@ CREATE TABLE photos (
     country         TEXT,
     width           INTEGER,
     height          INTEGER,
-    camera_make     TEXT,
-    camera_model    TEXT,
-    status          TEXT,          -- 'organized', 'skipped_duplicate', 'unsorted'
-    processed_at    TEXT           -- ISO 8601 timestamp
+    camera_make        TEXT,
+    camera_model       TEXT,
+    folder_description TEXT,       -- auto-extracted from source folder name (e.g. "Amsterdam 2014")
+    user_description   TEXT,       -- free text added manually by user
+    status             TEXT,       -- 'organized', 'skipped_duplicate', 'unsorted'
+    processed_at       TEXT        -- ISO 8601 timestamp
 );
 
 CREATE UNIQUE INDEX idx_hash ON photos(hash);
