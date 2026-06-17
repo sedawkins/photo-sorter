@@ -36,7 +36,9 @@ GPS; others have only a date; scanned old prints have neither.
 | HEIC conversion | `pillow-heif` plugin (winner files only, after dedup) |
 | Reverse geocoding | `reverse_geocoder` (offline, no API key needed) |
 | Database | SQLite via Python `sqlite3` |
-| Logging | Log file (permanent record) + email summary on run completion |
+| Logging | Log file + email summary, both stored in OneDrive `_system/` |
+| Persistence | OneDrive `_system/` folder (DB, token cache, config, logs) |
+| VM setup | Bash setup script — VM is fully stateless |
 | Source control | GitHub — `sedawkins/photo-sorter` |
 
 ### Authentication
@@ -45,6 +47,42 @@ GPS; others have only a date; scanned old prints have neither.
 - Account type: Personal Microsoft account
 - Flow: Device code flow (browser prompt on first run, token cached locally)
 - Permissions: `Files.Read.All`, `Files.ReadWrite.All`, `User.Read`
+
+### VM Lifecycle — Stateless Design
+
+The Azure VM holds no persistent state. Everything lives in OneDrive under `_system/`.
+
+**Startup sequence (handled by setup script):**
+1. Install system packages and Python dependencies
+2. Clone latest source from GitHub (`sedawkins/photo-sorter`)
+3. Authenticate via device code flow to get initial Graph API token
+4. Download `_system/` contents from OneDrive to the VM (DB, token cache, config)
+5. Run the app
+
+**Shutdown sequence:**
+1. Upload updated DB, token cache, and run log back to `_system/` in OneDrive
+2. VM can be deallocated — nothing is lost
+
+**First run (bootstrap):**
+No token cache exists yet, so the setup script triggers the device code flow first,
+then downloads `_system/` (which will only contain `config.json` at that point).
+
+### System Folder Structure
+
+```
+/Photos/Sorted/_system/
+    photo_sorter.db        ← SQLite database
+    token_cache.json       ← cached Graph API auth token
+    config.json            ← SMTP credentials, source paths, run settings
+    runs/
+        2026-06-17_14-30.log
+        2026-06-17_15-45.log
+```
+
+> **Security note:** `config.json` contains SMTP credentials. The `_system/` folder
+> is protected by your OneDrive account access controls and Microsoft's encryption
+> at rest. Do not share this folder. This is appropriate for a personal project
+> where you control all access.
 
 ---
 
@@ -159,8 +197,9 @@ CREATE INDEX idx_status ON photos(status);
 ## Logging
 
 Every run produces:
-- **Log file** on the VM (`runs/YYYY-MM-DD_HH-MM-SS.log`) — permanent record of every
-  file processed, skipped, converted, or errored
+- **Log file** uploaded to `/Photos/Sorted/_system/runs/YYYY-MM-DD_HH-MM-SS.log`
+  after the run completes — permanent record of every file processed, skipped,
+  converted, or errored
 - **Email summary** sent on run completion with counts:
   - Photos processed / copied / skipped
   - Duplicates detected and logged
@@ -183,6 +222,15 @@ Email is sent via SMTP (configurable — Gmail or any provider).
 ---
 
 ## Phased Implementation Plan
+
+### Phase 0 — VM setup script
+- Bash script (`setup.sh`) that fully provisions a fresh Azure Ubuntu VM:
+  - Installs Python 3, pip, git, and all required packages
+  - Clones `sedawkins/photo-sorter` from GitHub
+  - Triggers device code auth flow if no token cache found in OneDrive
+  - Downloads `_system/` from OneDrive
+- Companion `teardown.sh` that uploads DB, token cache, and log back to OneDrive
+- Both scripts checked into the repo so they're available on every fresh VM
 
 ### Phase 1 — Graph API connection & metadata scan
 - Authenticate via device code flow
