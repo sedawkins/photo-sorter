@@ -10,7 +10,7 @@ GPS; others have only a date; scanned old prints have neither.
 ## Goals
 
 1. Organize photos into two parallel folder hierarchies in OneDrive
-2. Detect and quarantine duplicates for manual review before deletion
+2. Detect and skip duplicates, logging them for reference
 3. Maintain a database to support future incremental imports (new thumb drives, cameras)
 4. Run entirely on an Azure VM using the Microsoft Graph API — no bulk download to laptop
 
@@ -23,18 +23,20 @@ GPS; others have only a date; scanned old prints have neither.
 - 50,000+ files makes local processing impractical
 - Graph API provides file hash (`quickXorHash`), photo metadata (`takenDateTime`,
   `geoCoordinates`, resolution, camera make/model) without downloading the file
-- File moves within OneDrive via Graph API are server-side (no data transfer)
-- Only suspected duplicate pairs are downloaded for pixel-level confirmation
+- File copies within OneDrive via Graph API are server-side (no data transfer)
+- Only a small random sample of duplicate pairs are downloaded for spot-check confirmation
 
 ### Components
 
 | Component | Technology |
 |---|---|
 | OneDrive access | Microsoft Graph API (Python `msal` + `requests`) |
-| Metadata & dedup | Graph API `photo` and `file` facets |
-| Duplicate confirmation | Download sample pair, pixel-level compare (`Pillow`) |
+| Metadata & dedup | Graph API `photo` and `file` facets + EXIF `ImageUniqueID` |
+| Duplicate spot-check | Download ~12 random pairs, pixel-level compare (`Pillow`) |
+| HEIC conversion | `pillow-heif` plugin (winner files only, after dedup) |
 | Reverse geocoding | `reverse_geocoder` (offline, no API key needed) |
 | Database | SQLite via Python `sqlite3` |
+| Logging | Log file (permanent record) + email summary on run completion |
 | Source control | GitHub — `sedawkins/photo-sorter` |
 
 ### Authentication
@@ -48,8 +50,8 @@ GPS; others have only a date; scanned old prints have neither.
 
 ## Folder Hierarchies
 
-All output goes into a new OneDrive root folder: `/Photos/Sorted/`  
-Original folders are **not touched** until the user manually verifies and deletes them.
+All output goes into a new OneDrive folder: `/Photos/Sorted/`
+Source folders are **never modified** — originals stay in place throughout.
 
 ### Primary hierarchy
 ```
@@ -59,7 +61,7 @@ Original folders are **not touched** until the user manually verifies and delete
             {State}/{City}/     ← US photos with GPS
             {Country}/{City}/   ← Non-US photos with GPS
             Other/              ← Photos with date but no GPS
-/Photos/Sorted/Unsorted/        ← Photos with no date and no GPS
+/Photos/Sorted/Unsorted/        ← Photos with no date and no GPS (manually reviewed later)
 ```
 
 ### Shadow hierarchy
@@ -72,35 +74,51 @@ Original folders are **not touched** until the user manually verifies and delete
 ```
 Shadow only contains photos that have GPS — no `Other` or `Unsorted` branches.
 
-### To Be Discarded
-```
-/Photos/Sorted/ToBeDiscarded/   ← Confirmed duplicate losers
-```
-
 ---
 
 ## Duplicate Handling
 
-1. **Detection:** group files by `quickXorHash` from Graph API (no download)
-2. **Confirmation:** for each duplicate group, download one pair and do pixel-level
-   comparison with Pillow to confirm they are truly identical
-3. **Winner selection** (in priority order):
-   - Highest resolution (width × height)
-   - Most complete metadata (GPS > date only > neither)
-   - Largest file size as final tiebreaker
-4. **Disposition:** losers are moved to `/Photos/Sorted/ToBeDiscarded/`; winner is
-   organized into the primary and shadow hierarchies normally
+### Detection (no download required)
+Duplicates are identified by two methods, in order:
+1. **`ImageUniqueID`** (EXIF field) — catches iPhone photos that exist as both HEIC and
+   JPEG copies of the same shot, even after format conversion
+2. **`quickXorHash`** — catches exact file duplicates across any format
+
+### Spot-check confirmation
+- Randomly select ~12 duplicate pairs from the full set
+- Download those pairs and do a pixel-level comparison with Pillow
+- Validates that the detection logic is working correctly before processing all 50k files
+- Not intended to confirm every duplicate — hashes are trusted after the spot-check passes
+
+### Winner selection (in priority order)
+1. Highest resolution (width × height)
+2. Most complete metadata (GPS > date only > neither)
+3. Largest file size as final tiebreaker
+
+### Disposition
+- **Winner:** copied into the primary and shadow hierarchies
+- **Losers:** skipped (not copied anywhere); logged in the run log with original path,
+  winner path, hash, and reason for losing
+
+---
+
+## Image Format Handling
+
+- **HEIC files:** converted to JPEG at copy time (winners only, after dedup)
+- **Live Photos (iPhone):** `.jpg` is kept; paired `.mov` file is skipped
+- All other formats (JPG, PNG, TIFF, BMP, WebP) are copied as-is
 
 ---
 
 ## Database Schema
 
-SQLite file: `photo_sorter.db` (kept on the VM, checked into `.gitignore`)
+SQLite file: `photo_sorter.db` (kept on the VM, listed in `.gitignore`)
 
 ```sql
 CREATE TABLE photos (
     id              INTEGER PRIMARY KEY,
     hash            TEXT NOT NULL,
+    image_unique_id TEXT,          -- EXIF ImageUniqueID (iPhone cross-format dedup)
     original_path   TEXT NOT NULL,
     new_path        TEXT,
     filename        TEXT NOT NULL,
@@ -116,11 +134,12 @@ CREATE TABLE photos (
     height          INTEGER,
     camera_make     TEXT,
     camera_model    TEXT,
-    status          TEXT,          -- 'organized', 'discarded', 'unsorted'
+    status          TEXT,          -- 'organized', 'skipped_duplicate', 'unsorted'
     processed_at    TEXT           -- ISO 8601 timestamp
 );
 
 CREATE UNIQUE INDEX idx_hash ON photos(hash);
+CREATE INDEX idx_image_unique_id ON photos(image_unique_id);
 CREATE INDEX idx_status ON photos(status);
 ```
 
@@ -137,12 +156,29 @@ CREATE INDEX idx_status ON photos(status);
 
 ---
 
-## Incremental Import (Future Thumb Drives)
+## Logging
 
-1. Scan new source files, compute or retrieve hash
-2. Check hash against database — skip if already present
-3. Process only new files through the same pipeline
-4. This works even if the new source is a local drive (hash computed locally)
+Every run produces:
+- **Log file** on the VM (`runs/YYYY-MM-DD_HH-MM-SS.log`) — permanent record of every
+  file processed, skipped, converted, or errored
+- **Email summary** sent on run completion with counts:
+  - Photos processed / copied / skipped
+  - Duplicates detected and logged
+  - HEIC files converted
+  - Errors encountered
+  - Run duration
+
+Email is sent via SMTP (configurable — Gmail or any provider).
+
+---
+
+## Incremental Import (Future Thumb Drives / iPhones)
+
+1. Point the script at a new source folder (OneDrive subfolder, local thumb drive, etc.)
+2. For each file, compute or retrieve hash and check `ImageUniqueID`
+3. Skip any file already in the database (by hash or ImageUniqueID)
+4. Process only new files through the full pipeline
+5. Works for both OneDrive sources (via Graph API) and local drives (hash computed locally)
 
 ---
 
@@ -151,26 +187,41 @@ CREATE INDEX idx_status ON photos(status);
 ### Phase 1 — Graph API connection & metadata scan
 - Authenticate via device code flow
 - Walk OneDrive source folders, retrieve metadata for every photo
-- Write all metadata to the database (no files moved yet)
+- Write all metadata to the database (no files copied yet)
 - Output a summary report: total photos, date coverage, GPS coverage, duplicate count
+- **Test against a small sample folder before running on all 50k**
 
-### Phase 2 — Duplicate confirmation
-- For each hash group with >1 file, download one pair and pixel-compare
-- Mark confirmed duplicates in the database
+### Phase 2 — Duplicate spot-check
+- Randomly select ~12 duplicate pairs
+- Download and pixel-compare with Pillow
+- Log results; abort full run if spot-check fails
 
 ### Phase 3 — Organization
 - Create `/Photos/Sorted/` folder structure in OneDrive via Graph API
-- Move winners into primary and shadow hierarchies (server-side moves)
-- Move losers into `ToBeDiscarded/`
+- Copy winners into primary and shadow hierarchies (server-side copies)
+- Convert HEIC winners to JPEG at copy time
+- Skip Live Photo `.mov` files
+- Log all skipped duplicates with full detail
 
 ### Phase 4 — Incremental import
-- CLI command to scan a new source folder or local drive
-- Check hashes against DB, process only new files
+- CLI command to scan a new source (OneDrive subfolder or local drive)
+- Check hashes and ImageUniqueIDs against DB, process only new files
+
+---
+
+## Future Enhancement — Location Inference for Pre-GPS Photos
+
+For photos with a date but no GPS (typically older digital cameras):
+- Group by date and camera model
+- Present a few sample images from each group for manual location identification
+- Once a location is tagged, update the database and **move the photos** from
+  `Year/Month/Other` into the correct `Year/Month/State/City` position in both
+  the primary and shadow hierarchies
 
 ---
 
 ## Out of Scope
 
-- Manual tagging of `Unsorted/` photos (user does this later)
-- Modifying or rewriting EXIF metadata
-- Any deletion — user empties `ToBeDiscarded/` manually after verification
+- Manual tagging of `Unsorted/` photos (no date, no GPS — deferred)
+- Modifying or rewriting EXIF metadata in original files
+- Any deletion — originals are never touched; user cleans up old folders manually
