@@ -1,0 +1,8 @@
+*.db
+*.db-shm
+*.db-wal
+token_cache.json
+.env
+__pycache__/
+*.pyc
+.venv/
