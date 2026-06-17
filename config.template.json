@@ -1,0 +1,14 @@
+{
+    "client_id": "d6ed1d2f-5172-4873-9c89-c147c354374d",
+    "source_path": "/me/drive/root:/Pictures",
+    "sorted_root": "/me/drive/root:/Photos/Sorted",
+    "system_path": "/me/drive/root:/Photos/Sorted/_system",
+    "smtp": {
+        "host": "smtp.gmail.com",
+        "port": 587,
+        "username": "your-email@gmail.com",
+        "password": "your-app-password",
+        "to": "sedawkins@gmail.com"
+    },
+    "duplicate_spot_check_count": 12
+}
