@@ -57,8 +57,22 @@ def parse_date(photo_facet: dict) -> tuple[str | None, str | None, str | None]:
         return None, None, None
 
 
-def resolve_location(lat: float, lon: float) -> tuple[str, str, str]:
-    """Return (city, state_or_region, country) from GPS coordinates."""
+MONTH_NAMES = {
+    "01": "January",  "02": "February", "03": "March",
+    "04": "April",    "05": "May",       "06": "June",
+    "07": "July",     "08": "August",    "09": "September",
+    "10": "October",  "11": "November",  "12": "December",
+}
+
+
+def resolve_location(lat: float, lon: float) -> tuple[str, str, str] | None:
+    """
+    Return (city, state_or_region, country) from GPS coordinates, or None if
+    the coordinates look invalid (near 0,0 is a common EXIF corruption artifact).
+    """
+    # Reject coordinates suspiciously close to 0,0 (Gulf of Guinea)
+    if abs(lat) < 1.0 and abs(lon) < 1.0:
+        return None
     try:
         results = rg.search([(lat, lon)], mode=1)
         r = results[0]
@@ -67,7 +81,7 @@ def resolve_location(lat: float, lon: float) -> tuple[str, str, str]:
         country = r.get("cc", "Unknown")
         return city, region, country
     except Exception:
-        return "Unknown", "", "Unknown"
+        return None
 
 
 def pick_location_path(city: str, region: str, country: str) -> list[str]:
@@ -122,6 +136,7 @@ def scan(source_folder: str, logger: logging.Logger):
             image_facet = item.get("image") or {}
 
             taken_date, year, month = parse_date(photo_facet)
+            month_name = MONTH_NAMES.get(month, month) if month else None
             hash_val = file_facet.get("hashes", {}).get("quickXorHash")
             image_unique_id = photo_facet.get("cameraMake")  # placeholder — see note
 
@@ -130,7 +145,12 @@ def scan(source_folder: str, logger: logging.Logger):
 
             city = state_or_region = country = None
             if lat is not None and lon is not None:
-                city, state_or_region, country = resolve_location(lat, lon)
+                loc = resolve_location(lat, lon)
+                if loc:
+                    city, state_or_region, country = loc
+                else:
+                    # Invalid GPS — treat as no location
+                    lat = lon = None
 
             parent_ref = item.get("parentReference", {})
             parent_path = parent_ref.get("path", "").replace("/drive/root:", "")
@@ -139,7 +159,9 @@ def scan(source_folder: str, logger: logging.Logger):
             # Use the immediate parent folder name as context (e.g. "Amsterdam 2014")
             folder_description = parent_ref.get("name") or parent_path.rstrip("/").rsplit("/", 1)[-1] or None
 
-            coverage = metadata_coverage(photo_facet, location_facet)
+            # Re-evaluate location_facet after possible invalidation above
+            effective_location = location_facet if lat is not None else None
+            coverage = metadata_coverage(photo_facet, effective_location)
             stats[{
                 "full": "full_metadata",
                 "date_only": "date_only",
@@ -161,7 +183,7 @@ def scan(source_folder: str, logger: logging.Logger):
                 "filename": name,
                 "taken_date": taken_date,
                 "year": year,
-                "month": month,
+                "month": month_name,
                 "latitude": lat,
                 "longitude": lon,
                 "city": city,
