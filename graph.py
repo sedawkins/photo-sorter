@@ -51,7 +51,7 @@ class GraphClient:
         """
         url = (
             f"{BASE}/me/drive/root:{folder_path}:/children"
-            "?$select=id,name,file,photo,location,size,parentReference"
+            "?$select=id,name,file,folder,photo,location,size,parentReference"
             "&$top=200"
         )
         items = []
