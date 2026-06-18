@@ -1,5 +1,9 @@
 """
 db.py — SQLite database initialization and access.
+
+Schema design:
+  photos            — one row per unique photo (keyed by hash), tracks the winner
+  photo_occurrences — one row per file path seen, so duplicates are never lost
 """
 
 import sqlite3
@@ -21,7 +25,6 @@ def _init_schema(conn: sqlite3.Connection):
             id              INTEGER PRIMARY KEY,
             hash            TEXT NOT NULL,
             image_unique_id TEXT,
-            original_path   TEXT NOT NULL,
             new_path        TEXT,
             filename        TEXT NOT NULL,
             taken_date      TEXT,
@@ -51,11 +54,30 @@ def _init_schema(conn: sqlite3.Connection):
 
         CREATE INDEX IF NOT EXISTS idx_status
             ON photos(status);
+
+        -- Every file path seen for a given hash, including duplicates.
+        -- original_path is the full OneDrive path of this specific file.
+        -- is_winner = 1 for the copy that will be organised into the hierarchy.
+        CREATE TABLE IF NOT EXISTS photo_occurrences (
+            id            INTEGER PRIMARY KEY,
+            hash          TEXT NOT NULL,
+            original_path TEXT NOT NULL,
+            folder_description TEXT,
+            is_winner     INTEGER NOT NULL DEFAULT 0,
+            scanned_at    TEXT
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_occurrence_path
+            ON photo_occurrences(original_path);
+
+        CREATE INDEX IF NOT EXISTS idx_occurrence_hash
+            ON photo_occurrences(hash);
     """)
     conn.commit()
 
 
 def upsert_photo(conn: sqlite3.Connection, photo: dict):
+    """Insert or update the canonical photo record (one per hash)."""
     cols = ", ".join(photo.keys())
     placeholders = ", ".join(f":{k}" for k in photo.keys())
     updates = ", ".join(
@@ -73,6 +95,23 @@ def upsert_photo(conn: sqlite3.Connection, photo: dict):
     conn.commit()
 
 
+def record_occurrence(conn: sqlite3.Connection, hash_val: str,
+                      original_path: str, folder_description: str | None,
+                      scanned_at: str):
+    """Record every file path seen for a hash. Idempotent on original_path."""
+    conn.execute(
+        """
+        INSERT INTO photo_occurrences (hash, original_path, folder_description, scanned_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(original_path) DO UPDATE SET
+            folder_description = excluded.folder_description,
+            scanned_at = excluded.scanned_at
+        """,
+        (hash_val, original_path, folder_description, scanned_at),
+    )
+    conn.commit()
+
+
 def get_by_hash(conn: sqlite3.Connection, hash_val: str):
     return conn.execute(
         "SELECT * FROM photos WHERE hash = ?", (hash_val,)
@@ -86,11 +125,11 @@ def get_by_image_unique_id(conn: sqlite3.Connection, uid: str):
 
 
 def get_duplicate_groups(conn: sqlite3.Connection) -> list[list[sqlite3.Row]]:
-    """Return groups of rows that share a hash (more than one file per hash)."""
+    """Return occurrence groups where the same hash appears more than once."""
     rows = conn.execute("""
-        SELECT * FROM photos
+        SELECT * FROM photo_occurrences
         WHERE hash IN (
-            SELECT hash FROM photos GROUP BY hash HAVING COUNT(*) > 1
+            SELECT hash FROM photo_occurrences GROUP BY hash HAVING COUNT(*) > 1
         )
         ORDER BY hash
     """).fetchall()

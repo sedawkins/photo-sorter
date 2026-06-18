@@ -12,7 +12,7 @@ from pathlib import Path
 
 import reverse_geocoder as rg
 
-from db import connect, upsert_photo
+from db import connect, upsert_photo, record_occurrence
 from graph import GraphClient
 from onedrive_sync import acquire_token, load_config
 
@@ -151,10 +151,12 @@ def scan(source_folder: str, logger: logging.Logger):
                 stats["errors"] += 1
                 continue
 
+            # Record every occurrence (catches duplicates across folders)
+            record_occurrence(conn, hash_val, original_path, folder_description, datetime.now(timezone.utc).isoformat())
+
             photo_record = {
                 "hash": hash_val,
                 "image_unique_id": photo_facet.get("takenDateTime"),  # best proxy until EXIF parsed
-                "original_path": original_path,
                 "new_path": None,
                 "filename": name,
                 "taken_date": taken_date,
@@ -186,7 +188,7 @@ def scan(source_folder: str, logger: logging.Logger):
 
     # ── Duplicate report ──────────────────────────────────────────────────────
     dup_rows = conn.execute("""
-        SELECT hash, COUNT(*) as cnt FROM photos
+        SELECT hash, COUNT(*) as cnt FROM photo_occurrences
         GROUP BY hash HAVING cnt > 1
     """).fetchall()
     stats["duplicate_hashes"] = len(dup_rows)
