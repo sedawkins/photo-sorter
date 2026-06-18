@@ -32,8 +32,7 @@ def images_are_identical(img_a: bytes, img_b: bytes) -> bool:
         b = Image.open(io.BytesIO(img_b)).convert("RGB")
         if a.size != b.size:
             return False
-        # Compare pixel data
-        return list(a.getdata()) == list(b.getdata())
+        return a.tobytes() == b.tobytes()
     except Exception as e:
         logger.warning(f"  Could not compare images: {e}")
         return False

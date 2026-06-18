@@ -81,14 +81,19 @@ class GraphClient:
         )
 
     def download_item(self, item_id: str) -> bytes:
-        """Download the content of a driveItem."""
+        """Download the content of a driveItem, streaming to avoid OOM on large files."""
         resp = self._session.get(
             f"{BASE}/me/drive/items/{item_id}/content",
             timeout=120,
             allow_redirects=True,
+            stream=True,
         )
         resp.raise_for_status()
-        return resp.content
+        chunks = []
+        for chunk in resp.iter_content(chunk_size=1024 * 1024):
+            if chunk:
+                chunks.append(chunk)
+        return b"".join(chunks)
 
     def ensure_folder(self, parent_id: str, folder_name: str) -> str:
         """
