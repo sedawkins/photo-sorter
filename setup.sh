@@ -53,6 +53,10 @@ if [ ! -f "$SYSTEM_DIR/config.json" ]; then
     exit 1
 fi
 
+# ── Shell convenience ─────────────────────────────────────────────────────────
+grep -qxF "cd ~/photo-sorter" "$HOME/.bashrc" || echo 'cd ~/photo-sorter' >> "$HOME/.bashrc"
+grep -qxF "source ~/photo-sorter/.venv/bin/activate" "$HOME/.bashrc" || echo 'source ~/photo-sorter/.venv/bin/activate' >> "$HOME/.bashrc"
+
 # ── Auth & OneDrive sync ──────────────────────────────────────────────────────
 echo
 echo "[5/5] Authenticating with Microsoft and syncing _system/ from OneDrive..."
