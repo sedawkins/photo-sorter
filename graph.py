@@ -5,6 +5,7 @@ Handles pagination, metadata retrieval, file download, and server-side copy.
 
 import time
 import requests
+from urllib.parse import quote
 
 BASE = "https://graph.microsoft.com/v1.0"
 
@@ -76,8 +77,8 @@ class GraphClient:
     def get_item_id_for_path(self, onedrive_path: str) -> str | None:
         """Resolve a OneDrive file path to a driveItem ID."""
         try:
-            escaped = onedrive_path.replace("'", "''")
-            resp = self._get(f"{BASE}/me/drive/root:{escaped}?$select=id")
+            encoded = quote(onedrive_path, safe='/')
+            resp = self._get(f"{BASE}/me/drive/root:{encoded}?$select=id")
             return resp.get("id")
         except requests.HTTPError as e:
             if e.response.status_code == 404:
