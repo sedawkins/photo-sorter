@@ -12,6 +12,7 @@ Run after scan.py and spotcheck.py have both completed successfully.
 import io
 import json
 import logging
+import re
 import sys
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -110,6 +111,15 @@ def pick_winners_all(conn) -> tuple[dict, dict]:
 
 # ── Destination path calculation ──────────────────────────────────────────────
 
+# Characters invalid in OneDrive/Windows folder names
+_INVALID_FOLDER_CHARS = re.compile(r'[\\/:*?"<>|]')
+
+def sanitize_folder_name(name: str) -> str:
+    """Replace OneDrive-invalid characters and trim whitespace/dots."""
+    name = _INVALID_FOLDER_CHARS.sub('_', name)
+    return name.strip('. ')
+
+
 def destination_parts(photo) -> tuple[list[str], list[str] | None]:
     """
     Returns (primary_parts, shadow_parts) folder path components.
@@ -126,9 +136,11 @@ def destination_parts(photo) -> tuple[list[str], list[str] | None]:
 
     if has_gps:
         if country == "US":
-            loc = [state or "Unknown_State", city]
+            loc = [sanitize_folder_name(state or "Unknown_State"),
+                   sanitize_folder_name(city)]
         else:
-            loc = [country or "Unknown_Country", city]
+            loc = [sanitize_folder_name(country or "Unknown_Country"),
+                   sanitize_folder_name(city)]
         primary = [year, month] + loc
         shadow = loc + [year, month]
     else:
