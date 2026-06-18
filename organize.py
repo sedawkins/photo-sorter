@@ -202,6 +202,20 @@ def run_organize(sorted_root: str, dry_run: bool = False):
             folder_id_cache[key] = client.ensure_folder_path(root_path, parts)
         return folder_id_cache[key]
 
+    # Track filenames already placed per folder to detect collisions
+    placed_names: dict[str, set[str]] = defaultdict(set)
+
+    def unique_filename(folder_key: str, filename: str, hash_val: str) -> str:
+        """Return filename unchanged, or with a hash suffix if the name is taken."""
+        if filename not in placed_names[folder_key]:
+            placed_names[folder_key].add(filename)
+            return filename
+        stem = Path(filename).stem
+        ext = Path(filename).suffix
+        new_name = f"{stem}_{hash_val[:6]}{ext}"
+        placed_names[folder_key].add(new_name)
+        return new_name
+
     # Track descriptions per destination folder
     folder_descriptions: dict[str, set[str]] = defaultdict(set)
 
@@ -231,11 +245,7 @@ def run_organize(sorted_root: str, dry_run: bool = False):
             # Handle HEIC conversion
             ext = Path(filename).suffix.lower()
             needs_conversion = ext in (".heic", ".heif")
-            final_filename = filename
-
-            if needs_conversion:
-                stem = Path(filename).stem
-                final_filename = stem + ".jpg"
+            base_filename = Path(filename).stem + ".jpg" if needs_conversion else filename
 
             # Resolve item ID for this occurrence
             item_id = client.get_item_id_for_path(original_path)
@@ -244,17 +254,23 @@ def run_organize(sorted_root: str, dry_run: bool = False):
                 stats["errors"] += 1
                 continue
 
+            # Assign unique filenames per destination folder (avoids IMG_1234.JPG collisions
+            # when two cameras produce the same filename in the same year/month/location)
+            primary_folder_id = get_folder_id(primary_root, primary_parts)
+            dest_primary_path = "/".join(primary_parts)
+            primary_key = primary_root + "/" + dest_primary_path
+            final_filename = unique_filename(primary_key, base_filename, hash_val)
+            if final_filename != base_filename:
+                logger.info(f"  Name collision: {base_filename} -> {final_filename}")
+
             if dry_run:
                 logger.info(
-                    f"  [DRY RUN] {filename} -> {'/'.join(primary_parts)}/{final_filename}"
+                    f"  [DRY RUN] {filename} -> {dest_primary_path}/{final_filename}"
                 )
                 stats["organized"] += 1
                 continue
 
             # Copy or convert into Primary
-            primary_folder_id = get_folder_id(primary_root, primary_parts)
-            dest_primary_path = "/".join(primary_parts)
-
             if needs_conversion:
                 raw = client.download_item(item_id)
                 jpeg_bytes, _ = convert_heic_to_jpeg(raw)
@@ -267,11 +283,13 @@ def run_organize(sorted_root: str, dry_run: bool = False):
 
             new_path = f"{dest_primary_path}/{final_filename}"
 
-            # Copy into Shadow (GPS photos only)
+            # Copy into Shadow (GPS photos only) — reuse the same unique name
             if shadow_parts:
                 shadow_folder_id = get_folder_id(shadow_root, shadow_parts)
+                shadow_key = shadow_root + "/" + "/".join(shadow_parts)
+                shadow_filename = unique_filename(shadow_key, base_filename, hash_val)
                 client.copy_item(item_id if not needs_conversion else new_item_id,
-                                 shadow_folder_id, final_filename)
+                                 shadow_folder_id, shadow_filename)
 
             # Track folder descriptions
             if folder_desc:
