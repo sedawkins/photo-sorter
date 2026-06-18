@@ -184,10 +184,12 @@ class GraphClient:
         if not monitor_url:
             raise RuntimeError("No monitor URL returned from copy operation")
 
-        # Poll until complete
+        # Poll until complete — monitor URL may be on a different domain,
+        # so pass the Authorization header explicitly rather than relying on session
+        auth_header = {"Authorization": f"Bearer {self._token}"}
         for _ in range(60):
             time.sleep(2)
-            status = self._session.get(monitor_url, timeout=30)
+            status = requests.get(monitor_url, headers=auth_header, timeout=30)
             status.raise_for_status()
             data = status.json()
             if data.get("status") == "completed":
