@@ -53,6 +53,13 @@ def build_msal_app(config):
     return app, cache
 
 
+def make_token_refresher(config):
+    """Return a callable that silently refreshes the access token when it expires."""
+    def refresh():
+        return acquire_token(config)
+    return refresh
+
+
 def acquire_token(config):
     app, cache = build_msal_app(config)
 

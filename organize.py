@@ -23,7 +23,7 @@ from PIL import Image
 
 from db import connect, get_duplicate_groups
 from graph import GraphClient
-from onedrive_sync import acquire_token, load_config
+from onedrive_sync import acquire_token, load_config, make_token_refresher
 
 APP_DIR = Path(__file__).parent
 SYSTEM_DIR = APP_DIR / "_system"
@@ -168,7 +168,7 @@ def update_description_file(folder_descriptions: set[str], existing: str | None)
 def run_organize(sorted_root: str, dry_run: bool = False):
     config = load_config()
     token = acquire_token(config)
-    client = GraphClient(token)
+    client = GraphClient(token, token_refresher=make_token_refresher(config))
     conn = connect(DB_PATH)
 
     primary_root = f"{sorted_root}/Primary"

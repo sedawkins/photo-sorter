@@ -14,7 +14,7 @@ import reverse_geocoder as rg
 
 from db import connect, upsert_photo, record_occurrence
 from graph import GraphClient
-from onedrive_sync import acquire_token, load_config
+from onedrive_sync import acquire_token, load_config, make_token_refresher
 
 APP_DIR = Path(__file__).parent
 SYSTEM_DIR = APP_DIR / "_system"
@@ -107,7 +107,7 @@ def metadata_coverage(photo_facet: dict, location_facet: dict | None) -> str:
 def scan(source_folder: str, logger: logging.Logger):
     config = load_config()
     token = acquire_token(config)
-    client = GraphClient(token)
+    client = GraphClient(token, token_refresher=make_token_refresher(config))
     conn = connect(DB_PATH)
 
     logger.info(f"Scanning: {source_folder}")

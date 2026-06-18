@@ -18,7 +18,7 @@ pillow_heif.register_heif_opener()
 
 from db import connect, get_duplicate_groups
 from graph import GraphClient
-from onedrive_sync import acquire_token, load_config
+from onedrive_sync import acquire_token, load_config, make_token_refresher
 
 APP_DIR = Path(__file__).parent
 SYSTEM_DIR = APP_DIR / "_system"
@@ -59,7 +59,7 @@ def run_spotcheck(sample_size: int = 12) -> bool:
     """
     config = load_config()
     token = acquire_token(config)
-    client = GraphClient(token)
+    client = GraphClient(token, token_refresher=make_token_refresher(config))
     conn = connect(DB_PATH)
 
     groups = get_duplicate_groups(conn)

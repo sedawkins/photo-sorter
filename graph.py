@@ -16,18 +16,30 @@ SKIP_EXTENSIONS = {".mov", ".mp4", ".avi", ".mkv"}
 
 
 class GraphClient:
-    def __init__(self, token: str):
+    def __init__(self, token: str, token_refresher=None):
         self._token = token
+        self._token_refresher = token_refresher
         self._session = requests.Session()
         self._session.headers.update({"Authorization": f"Bearer {token}"})
 
+    def _refresh_token(self):
+        if self._token_refresher:
+            self._token = self._token_refresher()
+            self._session.headers.update({"Authorization": f"Bearer {self._token}"})
+
     def _get(self, url: str, **kwargs) -> dict:
         resp = self._session.get(url, timeout=30, **kwargs)
+        if resp.status_code == 401 and self._token_refresher:
+            self._refresh_token()
+            resp = self._session.get(url, timeout=30, **kwargs)
         resp.raise_for_status()
         return resp.json()
 
     def _post(self, url: str, json: dict) -> dict:
         resp = self._session.post(url, json=json, timeout=30)
+        if resp.status_code == 401 and self._token_refresher:
+            self._refresh_token()
+            resp = self._session.post(url, json=json, timeout=30)
         resp.raise_for_status()
         return resp.json()
 
@@ -41,6 +53,17 @@ class GraphClient:
             },
             timeout=120,
         )
+        if resp.status_code == 401 and self._token_refresher:
+            self._refresh_token()
+            resp = self._session.put(
+                url,
+                data=data,
+                headers={
+                    "Authorization": f"Bearer {self._token}",
+                    "Content-Type": "application/octet-stream",
+                },
+                timeout=120,
+            )
         resp.raise_for_status()
         return resp.json()
 
