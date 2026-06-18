@@ -124,26 +124,42 @@ class GraphClient:
             pass
 
         # Create it
-        result = self._post(
-            f"{BASE}/me/drive/items/{parent_id}/children",
-            json={
-                "name": folder_name,
-                "folder": {},
-                "@microsoft.graph.conflictBehavior": "fail",
-            },
-        )
-        return result["id"]
+        try:
+            result = self._post(
+                f"{BASE}/me/drive/items/{parent_id}/children",
+                json={
+                    "name": folder_name,
+                    "folder": {},
+                    "@microsoft.graph.conflictBehavior": "fail",
+                },
+            )
+            return result["id"]
+        except requests.HTTPError as e:
+            if e.response.status_code == 409:
+                # Folder was created between our check and create — fetch it
+                data = self._get(
+                    f"{BASE}/me/drive/items/{parent_id}/children"
+                    f"?$filter=name eq '{folder_name}'"
+                    "&$select=id,name"
+                )
+                items = data.get("value", [])
+                if items:
+                    return items[0]["id"]
+            raise
 
     def ensure_folder_path(self, root_path: str, path_parts: list[str]) -> str:
         """
-        Walk/create a folder hierarchy under root_path.
+        Walk/create a folder hierarchy under root_path, creating root_path
+        itself if it doesn't exist yet.
         root_path is a OneDrive path like /Photos/Sorted/Primary
-        path_parts is e.g. ["2019", "06", "Texas", "Austin"]
+        path_parts is e.g. ["2019", "June", "Texas", "Austin"]
         Returns the final folder's driveItem ID.
         """
-        # Resolve root to an ID first
-        root = self._get(f"{BASE}/me/drive/root:{root_path}")
-        folder_id = root["id"]
+        # Build root by walking each segment, creating as needed
+        segments = [s for s in root_path.strip("/").split("/") if s]
+        folder_id = self._get(f"{BASE}/me/drive/root")["id"]
+        for segment in segments:
+            folder_id = self.ensure_folder(folder_id, segment)
         for part in path_parts:
             folder_id = self.ensure_folder(folder_id, part)
         return folder_id
