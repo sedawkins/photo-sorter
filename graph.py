@@ -73,6 +73,16 @@ class GraphClient:
             url = data.get("@odata.nextLink")
         return items
 
+    def get_item_id_for_path(self, onedrive_path: str) -> str | None:
+        """Resolve a OneDrive file path to a driveItem ID."""
+        try:
+            resp = self._get(f"{BASE}/me/drive/root:{onedrive_path}?$select=id")
+            return resp.get("id")
+        except requests.HTTPError as e:
+            if e.response.status_code == 404:
+                return None
+            raise
+
     def get_item_metadata(self, item_id: str) -> dict:
         """Fetch full metadata for a single driveItem by ID."""
         return self._get(
