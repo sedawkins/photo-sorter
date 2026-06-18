@@ -164,17 +164,33 @@ class GraphClient:
             folder_id = self.ensure_folder(folder_id, part)
         return folder_id
 
+    def delete_item_if_exists(self, parent_folder_id: str, filename: str):
+        """Delete a file in a folder if it exists, to avoid nameAlreadyExists on copy."""
+        try:
+            data = self._get(
+                f"{BASE}/me/drive/items/{parent_folder_id}/children"
+                f"?$filter=name eq '{filename}'&$select=id,name"
+            )
+            for item in data.get("value", []):
+                self._session.delete(
+                    f"{BASE}/me/drive/items/{item['id']}", timeout=30
+                ).raise_for_status()
+        except Exception:
+            pass  # If it doesn't exist or delete fails, the copy will surface the real error
+
     def copy_item(self, item_id: str, dest_folder_id: str, filename: str) -> str:
         """
         Server-side copy of item_id into dest_folder_id with the given filename.
         Returns the new item's ID (polls until complete).
         """
+        # Personal OneDrive copy ignores conflictBehavior, so delete first if exists
+        self.delete_item_if_exists(dest_folder_id, filename)
+
         resp = self._session.post(
             f"{BASE}/me/drive/items/{item_id}/copy",
             json={
                 "parentReference": {"id": dest_folder_id},
                 "name": filename,
-                "@microsoft.graph.conflictBehavior": "replace",
             },
             timeout=30,
         )
