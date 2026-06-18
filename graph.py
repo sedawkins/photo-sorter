@@ -174,6 +174,7 @@ class GraphClient:
             json={
                 "parentReference": {"id": dest_folder_id},
                 "name": filename,
+                "@microsoft.graph.conflictBehavior": "replace",
             },
             timeout=30,
         )
