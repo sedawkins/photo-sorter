@@ -224,7 +224,9 @@ def run_organize(sorted_root: str, dry_run: bool = False):
             return filename
         stem = Path(filename).stem
         ext = Path(filename).suffix
-        new_name = f"{stem}_{hash_val[:6]}{ext}"
+        # quickXorHash is base64 — strip non-alphanumeric chars before using as suffix
+        safe_suffix = re.sub(r'[^a-zA-Z0-9]', '', hash_val)[:6]
+        new_name = f"{stem}_{safe_suffix}{ext}"
         placed_names[folder_key].add(new_name)
         return new_name
 
