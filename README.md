@@ -8,8 +8,16 @@ Initial Goals:
 6.	Move duplicates into a “to be discarded” folder.  I’ll empty it after ensuring that everything worked correctly
 7.	Keep a database of pictures in the new folders so when I find new (old) phones, thumb drives or cameras I can scan through the pictures and add any not already in the new folders.
 8.	Organize the source code on github.
-9.	Run the app on an Azure VM, since most of my (disorganized) file folders are on OneDrive.
-10.	
+9.	Run the app on an Azure VM, since most of my (disorganized) file folders are on OneDrive.	
+
 Future enhancements:
 1.	A utility to find groups of pictures in the “other” folder (no geo tags) and show a sample to me so I can manually identify the location.  Move them into the sorted hierarchy.  Likely way to group pictures is if they were taken with the same camera on the same day, then they are likely at the same location.
-2.	Connectors to pull picture folders from other places like Google Drive or DropBox.
+2.	 Connectors to pull picture folders from other places like Google Drive or DropBox.
+3.   Parallel copy optimization (ThreadPoolExecutor, 5-10 concurrent copies)
+4.   Shadow shortcuts instead of full copies (+ orphan cleanup utility
+5.   Movie file handling (2019/Movies/, Texas/Movies/)
+6.   Location tagging utility for pre-GPS photos (promote folder descriptions like slide tray names)
+7.   AI image tagging (Azure Computer Vision, queryable tags in DB, geo-scoped to keep costs down)
+8.   Email summary on run completion
+9.   Additional folder scans after this run
+10.   Phase 4 incremental import for new photos
