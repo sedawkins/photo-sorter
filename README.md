@@ -21,3 +21,5 @@ Future enhancements:
 8.   Email summary on run completion
 9.   Additional folder scans after this run
 10.   Phase 4 incremental import for new photos
+11.   Cleanup cruft (non-image files) (e.g., Windows phone .nar, .tln and other non-image files)
+12.   Thumbnail detection (small dimensions + size threshold, with safety checks)
