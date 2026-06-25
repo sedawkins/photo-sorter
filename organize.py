@@ -210,7 +210,7 @@ def run_organize(sorted_root: str, dry_run: bool = False):
     logger.info(f"Duplicate losers to skip: {sum(len(v) for v in losers.values())}")
     logger.info("")
 
-    # Each thread gets its own GraphClient (separate requests.Session)
+    # Each thread gets its own GraphClient and DB connection
     thread_local = threading.local()
 
     def get_client() -> GraphClient:
@@ -219,6 +219,11 @@ def run_organize(sorted_root: str, dry_run: bool = False):
                 token, token_refresher=make_token_refresher(config)
             )
         return thread_local.client
+
+    def get_conn():
+        if not hasattr(thread_local, "conn"):
+            thread_local.conn = connect(DB_PATH)
+        return thread_local.conn
 
     # Shared state — all access protected by locks
     folder_id_cache: dict[str, str] = {}
@@ -264,8 +269,7 @@ def run_organize(sorted_root: str, dry_run: bool = False):
 
     def process_photo(hash_val: str, occ) -> None:
         client = get_client()
-        with db_lock:
-            photo = conn.execute(
+        photo = get_conn().execute(
                 "SELECT * FROM photos WHERE hash=?", (hash_val,)
             ).fetchone()
 
@@ -351,16 +355,16 @@ def run_organize(sorted_root: str, dry_run: bool = False):
                     if shadow_parts:
                         folder_descriptions["/".join(shadow_parts)].add(folder_desc)
 
-            with db_lock:
-                conn.execute(
+            _c = get_conn()
+            _c.execute(
                     "UPDATE photos SET status='organized', new_path=? WHERE hash=?",
                     (new_path, hash_val)
                 )
-                conn.execute(
+            _c.execute(
                     "UPDATE photo_occurrences SET is_winner=1 WHERE hash=? AND original_path=?",
                     (hash_val, original_path)
                 )
-                conn.commit()
+            _c.commit()
 
             with stats_lock:
                 stats["organized"] += 1
