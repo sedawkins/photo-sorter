@@ -12,7 +12,7 @@ BASE = "https://graph.microsoft.com/v1.0"
 IMAGE_EXTENSIONS = {
     ".jpg", ".jpeg", ".png", ".heic", ".tiff", ".tif", ".bmp", ".webp",
 }
-SKIP_EXTENSIONS = {".mov", ".mp4", ".avi", ".mkv"}
+MOVIE_EXTENSIONS = {".mov", ".mp4", ".avi", ".mkv", ".m4v", ".wmv"}
 
 
 class GraphClient:
@@ -69,9 +69,9 @@ class GraphClient:
 
     def list_photos(self, folder_path: str) -> list[dict]:
         """
-        Recursively list all image files under folder_path.
-        folder_path is a Graph API path like /me/drive/root:/Pictures
-        Returns a flat list of Graph API driveItem dicts.
+        Recursively list all image and movie files under folder_path.
+        Returns a flat list of Graph API driveItem dicts, each tagged with
+        a '_media_type' key ('photo' or 'movie').
         """
         url = (
             f"{BASE}/me/drive/root:{folder_path}:/children"
@@ -83,7 +83,6 @@ class GraphClient:
             data = self._get(url)
             for item in data.get("value", []):
                 if "folder" in item:
-                    # Recurse into subfolders
                     sub_path = (
                         item["parentReference"]["path"].replace("/drive/root:", "")
                         + "/" + item["name"]
@@ -92,8 +91,12 @@ class GraphClient:
                 elif "file" in item:
                     ext = "." + item["name"].rsplit(".", 1)[-1].lower() if "." in item["name"] else ""
                     if ext in IMAGE_EXTENSIONS:
+                        item["_media_type"] = "photo"
                         items.append(item)
-                    # Silently skip .mov and other non-image files
+                    elif ext in MOVIE_EXTENSIONS:
+                        item["_media_type"] = "movie"
+                        items.append(item)
+                    # Silently skip all other file types
             url = data.get("@odata.nextLink")
         return items
 

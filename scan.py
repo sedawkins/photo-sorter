@@ -114,10 +114,13 @@ def scan(source_folder: str, logger: logging.Logger):
     logger.info("Listing files (this may take a few minutes for large folders)...")
 
     items = client.list_photos(source_folder)
-    logger.info(f"Found {len(items)} image file(s)")
+    photos = [i for i in items if i.get("_media_type") == "photo"]
+    movies = [i for i in items if i.get("_media_type") == "movie"]
+    logger.info(f"Found {len(photos)} photo(s) and {len(movies)} movie(s)")
 
     stats = {
         "total": len(items),
+        "movies": len(movies),
         "full_metadata": 0,
         "date_only": 0,
         "no_metadata": 0,
@@ -130,10 +133,12 @@ def scan(source_folder: str, logger: logging.Logger):
         item_id = item.get("id")
 
         try:
+            media_type = item.get("_media_type", "photo")
             photo_facet = item.get("photo") or {}
             location_facet = item.get("location")
             file_facet = item.get("file") or {}
             image_facet = item.get("image") or {}
+            file_size = item.get("size")
 
             taken_date, year, month = parse_date(photo_facet)
             month_name = MONTH_NAMES.get(month, month) if month else None
@@ -197,6 +202,8 @@ def scan(source_folder: str, logger: logging.Logger):
                 "user_description": None,
                 "status": "scanned",
                 "processed_at": datetime.now(timezone.utc).isoformat(),
+                "media_type": media_type,
+                "file_size": file_size,
             }
 
             upsert_photo(conn, photo_record)
@@ -221,7 +228,9 @@ def scan(source_folder: str, logger: logging.Logger):
     logger.info("=" * 50)
     logger.info("SCAN COMPLETE")
     logger.info("=" * 50)
-    logger.info(f"  Total images found:       {stats['total']:>6}")
+    logger.info(f"  Total files found:        {stats['total']:>6}")
+    logger.info(f"  Photos:                   {stats['total'] - stats['movies']:>6}")
+    logger.info(f"  Movies:                   {stats['movies']:>6}")
     logger.info(f"  Full metadata (date+GPS): {stats['full_metadata']:>6}")
     logger.info(f"  Date only (no GPS):       {stats['date_only']:>6}")
     logger.info(f"  No metadata:              {stats['no_metadata']:>6}")

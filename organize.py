@@ -234,7 +234,7 @@ def run_organize(sorted_root: str, dry_run: bool = False):
     folder_descriptions: dict[str, set[str]] = defaultdict(set)
 
     stats = {"organized": 0, "skipped_dup": 0, "converted": 0,
-             "unsorted": 0, "errors": 0}
+             "unsorted": 0, "movies": 0, "collisions": 0, "errors": 0}
 
     for i, (hash_val, occ) in enumerate(to_process.items(), 1):
         photo = conn.execute(
@@ -243,12 +243,23 @@ def run_organize(sorted_root: str, dry_run: bool = False):
         filename = photo["filename"]
         original_path = occ["original_path"]
         folder_desc = occ["folder_description"] or photo["folder_description"]
+        is_movie = (photo["media_type"] == "movie")
 
         try:
             has_date = photo["year"] and photo["year"] != "Unknown"
             has_gps = photo["latitude"] is not None
 
-            if not has_date and not has_gps:
+            if is_movie:
+                # Movies go into Year/Movies/ (primary only, no shadow)
+                if has_date:
+                    primary_parts = [photo["year"], "Movies"]
+                    dest_root = primary_root
+                else:
+                    primary_parts = ["Movies"]
+                    dest_root = unsorted_root
+                shadow_parts = None
+                stats["movies"] += 1
+            elif not has_date and not has_gps:
                 primary_parts, shadow_parts = unsorted_parts()
                 dest_root = unsorted_root
                 stats["unsorted"] += 1
@@ -256,9 +267,9 @@ def run_organize(sorted_root: str, dry_run: bool = False):
                 primary_parts, shadow_parts = destination_parts(photo)
                 dest_root = primary_root
 
-            # Handle HEIC conversion
+            # Handle HEIC conversion (photos only)
             ext = Path(filename).suffix.lower()
-            needs_conversion = ext in (".heic", ".heif")
+            needs_conversion = (not is_movie) and ext in (".heic", ".heif")
             base_filename = Path(filename).stem + ".jpg" if needs_conversion else filename
 
             # Resolve item ID for this occurrence
@@ -268,14 +279,14 @@ def run_organize(sorted_root: str, dry_run: bool = False):
                 stats["errors"] += 1
                 continue
 
-            # Assign unique filenames per destination folder (avoids IMG_1234.JPG collisions
-            # when two cameras produce the same filename in the same year/month/location)
-            primary_folder_id = get_folder_id(primary_root, primary_parts)
+            # Assign unique filenames per destination folder
+            primary_folder_id = get_folder_id(dest_root, primary_parts)
             dest_primary_path = "/".join(primary_parts)
-            primary_key = primary_root + "/" + dest_primary_path
+            primary_key = dest_root + "/" + dest_primary_path
             final_filename = unique_filename(primary_key, base_filename, hash_val)
             if final_filename != base_filename:
                 logger.info(f"  Name collision: {base_filename} -> {final_filename}")
+                stats["collisions"] += 1
 
             if dry_run:
                 logger.info(
@@ -297,7 +308,7 @@ def run_organize(sorted_root: str, dry_run: bool = False):
 
             new_path = f"{dest_primary_path}/{final_filename}"
 
-            # Copy into Shadow (GPS photos only) — reuse the same unique name
+            # Copy into Shadow (GPS photos only, never movies)
             if shadow_parts:
                 shadow_folder_id = get_folder_id(shadow_root, shadow_parts)
                 shadow_key = shadow_root + "/" + "/".join(shadow_parts)
@@ -370,7 +381,9 @@ def run_organize(sorted_root: str, dry_run: bool = False):
     logger.info("ORGANIZE COMPLETE")
     logger.info("=" * 50)
     logger.info(f"  Organized:          {stats['organized']:>6}")
+    logger.info(f"  Movies:             {stats['movies']:>6}")
     logger.info(f"  HEIC converted:     {stats['converted']:>6}")
+    logger.info(f"  Name collisions:    {stats['collisions']:>6}")
     logger.info(f"  Unsorted (no meta): {stats['unsorted']:>6}")
     logger.info(f"  Duplicates skipped: {stats['skipped_dup']:>6}")
     logger.info(f"  Errors:             {stats['errors']:>6}")

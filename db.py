@@ -42,8 +42,19 @@ def _init_schema(conn: sqlite3.Connection):
             folder_description TEXT,
             user_description   TEXT,
             status             TEXT,
-            processed_at       TEXT
+            processed_at       TEXT,
+            media_type         TEXT,   -- 'photo' or 'movie'
+            file_size          INTEGER -- bytes, used for soft duplicate detection
         );
+    """)
+    # Migrate existing DBs that predate these columns
+    for col, col_type in [("media_type", "TEXT"), ("file_size", "INTEGER")]:
+        try:
+            conn.execute(f"ALTER TABLE photos ADD COLUMN {col} {col_type}")
+            conn.commit()
+        except Exception:
+            pass  # Column already exists
+    conn.executescript("""
 
         CREATE UNIQUE INDEX IF NOT EXISTS idx_hash
             ON photos(hash);
