@@ -251,6 +251,9 @@ class GraphClient:
             if data.get("status") == "completed":
                 return data["resourceId"]
             if data.get("status") == "failed":
+                err_code = data.get("error", {}).get("code", "")
+                if err_code == "nameAlreadyExists":
+                    return data.get("resourceId") or "exists"
                 raise RuntimeError(f"Copy failed: {data}")
         raise TimeoutError(f"Copy timed out for item {item_id}")
 
