@@ -14,7 +14,9 @@ import json
 import logging
 import re
 import sys
+import threading
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -177,10 +179,12 @@ def update_description_file(folder_descriptions: set[str], existing: str | None)
 
 # ── Main organizer ────────────────────────────────────────────────────────────
 
+MAX_WORKERS = 3  # conservative parallelism to avoid OneDrive throttling
+
+
 def run_organize(sorted_root: str, dry_run: bool = False):
     config = load_config()
     token = acquire_token(config)
-    client = GraphClient(token, token_refresher=make_token_refresher(config))
     conn = connect(DB_PATH)
 
     primary_root = f"{sorted_root}/Primary"
@@ -189,6 +193,7 @@ def run_organize(sorted_root: str, dry_run: bool = False):
 
     logger.info(f"Output root: {sorted_root}")
     logger.info(f"Dry run: {dry_run}")
+    logger.info(f"Workers: {MAX_WORKERS}")
     logger.info("")
 
     winners, losers = pick_winners_all(conn)
@@ -205,33 +210,50 @@ def run_organize(sorted_root: str, dry_run: bool = False):
     logger.info(f"Duplicate losers to skip: {sum(len(v) for v in losers.values())}")
     logger.info("")
 
-    # Cache folder IDs to avoid redundant API calls
+    # Each thread gets its own GraphClient (separate requests.Session)
+    thread_local = threading.local()
+
+    def get_client() -> GraphClient:
+        if not hasattr(thread_local, "client"):
+            thread_local.client = GraphClient(
+                token, token_refresher=make_token_refresher(config)
+            )
+        return thread_local.client
+
+    # Shared state — all access protected by locks
     folder_id_cache: dict[str, str] = {}
+    placed_names: dict[str, set[str]] = defaultdict(set)
+    folder_descriptions: dict[str, set[str]] = defaultdict(set)
+
+    folder_cache_lock = threading.Lock()
+    names_lock = threading.Lock()
+    db_lock = threading.Lock()
+    stats_lock = threading.Lock()
+    desc_lock = threading.Lock()
+    progress_counter = [0]  # mutable int in a list for thread-safe increment
 
     def get_folder_id(root_path: str, parts: list[str]) -> str:
         key = root_path + "/" + "/".join(parts)
-        if key not in folder_id_cache:
-            folder_id_cache[key] = client.ensure_folder_path(root_path, parts)
-        return folder_id_cache[key]
-
-    # Track filenames already placed per folder to detect collisions
-    placed_names: dict[str, set[str]] = defaultdict(set)
+        with folder_cache_lock:
+            if key in folder_id_cache:
+                return folder_id_cache[key]
+        # Create folder outside lock — ensure_folder_path handles 409 races
+        folder_id = get_client().ensure_folder_path(root_path, parts)
+        with folder_cache_lock:
+            folder_id_cache[key] = folder_id
+        return folder_id
 
     def unique_filename(folder_key: str, filename: str, hash_val: str) -> str:
-        """Return filename unchanged, or with a hash suffix if the name is taken."""
-        if filename not in placed_names[folder_key]:
-            placed_names[folder_key].add(filename)
-            return filename
-        stem = Path(filename).stem
-        ext = Path(filename).suffix
-        # quickXorHash is base64 — strip non-alphanumeric chars before using as suffix
-        safe_suffix = re.sub(r'[^a-zA-Z0-9]', '', hash_val)[:6]
-        new_name = f"{stem}_{safe_suffix}{ext}"
-        placed_names[folder_key].add(new_name)
-        return new_name
-
-    # Track descriptions per destination folder
-    folder_descriptions: dict[str, set[str]] = defaultdict(set)
+        with names_lock:
+            if filename not in placed_names[folder_key]:
+                placed_names[folder_key].add(filename)
+                return filename
+            stem = Path(filename).stem
+            ext = Path(filename).suffix
+            safe_suffix = re.sub(r'[^a-zA-Z0-9]', '', hash_val)[:6]
+            new_name = f"{stem}_{safe_suffix}{ext}"
+            placed_names[folder_key].add(new_name)
+            return new_name
 
     soft_dup_count = conn.execute(
         "SELECT COUNT(*) FROM photos WHERE status='soft_duplicate'"
@@ -240,10 +262,13 @@ def run_organize(sorted_root: str, dry_run: bool = False):
     stats = {"organized": 0, "skipped_dup": 0, "soft_dup": soft_dup_count,
              "converted": 0, "unsorted": 0, "movies": 0, "collisions": 0, "errors": 0}
 
-    for i, (hash_val, occ) in enumerate(to_process.items(), 1):
-        photo = conn.execute(
-            "SELECT * FROM photos WHERE hash=?", (hash_val,)
-        ).fetchone()
+    def process_photo(hash_val: str, occ) -> None:
+        client = get_client()
+        with db_lock:
+            photo = conn.execute(
+                "SELECT * FROM photos WHERE hash=?", (hash_val,)
+            ).fetchone()
+
         filename = photo["filename"]
         original_path = occ["original_path"]
         folder_desc = occ["folder_description"] or photo["folder_description"]
@@ -254,7 +279,6 @@ def run_organize(sorted_root: str, dry_run: bool = False):
             has_gps = photo["latitude"] is not None
 
             if is_movie:
-                # Movies go into Year/Movies/ (primary only, no shadow)
                 if has_date:
                     primary_parts = [photo["year"], "Movies"]
                     dest_root = primary_root
@@ -262,88 +286,105 @@ def run_organize(sorted_root: str, dry_run: bool = False):
                     primary_parts = ["Movies"]
                     dest_root = unsorted_root
                 shadow_parts = None
-                stats["movies"] += 1
+                with stats_lock:
+                    stats["movies"] += 1
             elif not has_date and not has_gps:
                 primary_parts, shadow_parts = unsorted_parts()
                 dest_root = unsorted_root
-                stats["unsorted"] += 1
+                with stats_lock:
+                    stats["unsorted"] += 1
             else:
                 primary_parts, shadow_parts = destination_parts(photo)
                 dest_root = primary_root
 
-            # Handle HEIC conversion (photos only)
             ext = Path(filename).suffix.lower()
             needs_conversion = (not is_movie) and ext in (".heic", ".heif")
             base_filename = Path(filename).stem + ".jpg" if needs_conversion else filename
 
-            # Resolve item ID for this occurrence
             item_id = client.get_item_id_for_path(original_path)
             if not item_id:
                 logger.warning(f"  Could not resolve item ID for {original_path} — skipping")
-                stats["errors"] += 1
-                continue
+                with stats_lock:
+                    stats["errors"] += 1
+                return
 
-            # Assign unique filenames per destination folder
             primary_folder_id = get_folder_id(dest_root, primary_parts)
             dest_primary_path = "/".join(primary_parts)
             primary_key = dest_root + "/" + dest_primary_path
             final_filename = unique_filename(primary_key, base_filename, hash_val)
             if final_filename != base_filename:
                 logger.info(f"  Name collision: {base_filename} -> {final_filename}")
-                stats["collisions"] += 1
+                with stats_lock:
+                    stats["collisions"] += 1
 
             if dry_run:
-                logger.info(
-                    f"  [DRY RUN] {filename} -> {dest_primary_path}/{final_filename}"
-                )
-                stats["organized"] += 1
-                continue
+                logger.info(f"  [DRY RUN] {filename} -> {dest_primary_path}/{final_filename}")
+                with stats_lock:
+                    stats["organized"] += 1
+                return
 
-            # Copy or convert into Primary
             if needs_conversion:
                 raw = client.download_item(item_id)
                 jpeg_bytes, _ = convert_heic_to_jpeg(raw)
                 new_item_id = client.upload_small_file(
                     primary_folder_id, final_filename, jpeg_bytes
                 )
-                stats["converted"] += 1
+                with stats_lock:
+                    stats["converted"] += 1
             else:
                 new_item_id = client.copy_item(item_id, primary_folder_id, final_filename)
 
             new_path = f"{dest_primary_path}/{final_filename}"
 
-            # Copy into Shadow (GPS photos only, never movies)
             if shadow_parts:
                 shadow_folder_id = get_folder_id(shadow_root, shadow_parts)
                 shadow_key = shadow_root + "/" + "/".join(shadow_parts)
                 shadow_filename = unique_filename(shadow_key, base_filename, hash_val)
-                client.copy_item(item_id if not needs_conversion else new_item_id,
-                                 shadow_folder_id, shadow_filename)
+                client.copy_item(
+                    item_id if not needs_conversion else new_item_id,
+                    shadow_folder_id, shadow_filename
+                )
 
-            # Track folder descriptions
             if folder_desc:
-                folder_descriptions[dest_primary_path].add(folder_desc)
-                if shadow_parts:
-                    folder_descriptions["/".join(shadow_parts)].add(folder_desc)
+                with desc_lock:
+                    folder_descriptions[dest_primary_path].add(folder_desc)
+                    if shadow_parts:
+                        folder_descriptions["/".join(shadow_parts)].add(folder_desc)
 
-            # Update DB
-            conn.execute(
-                "UPDATE photos SET status='organized', new_path=? WHERE hash=?",
-                (new_path, hash_val)
-            )
-            conn.execute(
-                "UPDATE photo_occurrences SET is_winner=1 WHERE hash=? AND original_path=?",
-                (hash_val, original_path)
-            )
-            conn.commit()
-            stats["organized"] += 1
+            with db_lock:
+                conn.execute(
+                    "UPDATE photos SET status='organized', new_path=? WHERE hash=?",
+                    (new_path, hash_val)
+                )
+                conn.execute(
+                    "UPDATE photo_occurrences SET is_winner=1 WHERE hash=? AND original_path=?",
+                    (hash_val, original_path)
+                )
+                conn.commit()
 
-            if i % 50 == 0:
-                logger.info(f"  Progress: {i}/{len(to_process)}")
+            with stats_lock:
+                stats["organized"] += 1
+                progress_counter[0] += 1
+                i = progress_counter[0]
+                if i % 50 == 0:
+                    logger.info(f"  Progress: {i}/{len(to_process)}")
 
         except Exception as e:
             logger.error(f"  Error organizing {filename}: {e}")
-            stats["errors"] += 1
+            with stats_lock:
+                stats["errors"] += 1
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = {
+            executor.submit(process_photo, hash_val, occ): hash_val
+            for hash_val, occ in to_process.items()
+        }
+        for future in as_completed(futures):
+            # Exceptions are caught inside process_photo; this re-raises any unexpected ones
+            try:
+                future.result()
+            except Exception as e:
+                logger.error(f"  Unexpected error in worker: {e}")
 
     # ── Log skipped duplicates ────────────────────────────────────────────────
     if losers:
