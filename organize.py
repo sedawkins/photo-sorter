@@ -193,12 +193,12 @@ def run_organize(sorted_root: str, dry_run: bool = False):
 
     winners, losers = pick_winners_all(conn)
 
-    # Filter to only unorganized winners
+    # Filter to only unorganized winners (skip organized and soft_duplicate)
     to_process = {
         h: occ for h, occ in winners.items()
         if conn.execute(
             "SELECT status FROM photos WHERE hash=?", (h,)
-        ).fetchone()["status"] != "organized"
+        ).fetchone()["status"] not in ("organized", "soft_duplicate")
     }
 
     logger.info(f"Photos to organize: {len(to_process)}")
@@ -233,8 +233,12 @@ def run_organize(sorted_root: str, dry_run: bool = False):
     # Track descriptions per destination folder
     folder_descriptions: dict[str, set[str]] = defaultdict(set)
 
-    stats = {"organized": 0, "skipped_dup": 0, "converted": 0,
-             "unsorted": 0, "movies": 0, "collisions": 0, "errors": 0}
+    soft_dup_count = conn.execute(
+        "SELECT COUNT(*) FROM photos WHERE status='soft_duplicate'"
+    ).fetchone()[0]
+
+    stats = {"organized": 0, "skipped_dup": 0, "soft_dup": soft_dup_count,
+             "converted": 0, "unsorted": 0, "movies": 0, "collisions": 0, "errors": 0}
 
     for i, (hash_val, occ) in enumerate(to_process.items(), 1):
         photo = conn.execute(
@@ -386,6 +390,7 @@ def run_organize(sorted_root: str, dry_run: bool = False):
     logger.info(f"  Name collisions:    {stats['collisions']:>6}")
     logger.info(f"  Unsorted (no meta): {stats['unsorted']:>6}")
     logger.info(f"  Duplicates skipped: {stats['skipped_dup']:>6}")
+    logger.info(f"  Soft dups skipped:  {stats['soft_dup']:>6}")
     logger.info(f"  Errors:             {stats['errors']:>6}")
     logger.info("=" * 50)
 
