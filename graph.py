@@ -234,6 +234,9 @@ class GraphClient:
             },
             timeout=30,
         )
+        if resp.status_code == 409:
+            # File already exists in dest — treat as success (parallel race)
+            return "exists"
         resp.raise_for_status()
 
         # Graph returns 202 Accepted with a monitor URL
