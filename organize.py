@@ -419,7 +419,7 @@ def run_organize(sorted_root: str, dry_run: bool = False):
                 folder_id = folder_id_cache.get(root + "/" + folder_path)
                 if folder_id:
                     content = update_description_file(descs, None)
-                    client.upload_small_file(folder_id, "_description.txt",
+                    get_client().upload_small_file(folder_id, "_description.txt",
                                              content.encode("utf-8"))
             except Exception as e:
                 logger.warning(f"  Could not write _description.txt for {folder_path}: {e}")
