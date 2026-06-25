@@ -27,43 +27,55 @@ class GraphClient:
             self._token = self._token_refresher()
             self._session.headers.update({"Authorization": f"Bearer {self._token}"})
 
-    def _get(self, url: str, **kwargs) -> dict:
-        resp = self._session.get(url, timeout=30, **kwargs)
+    def _handle_retry(self, resp, retry_fn):
+        """Handle 401 (token refresh) and 429 (rate limit backoff), then retry once."""
         if resp.status_code == 401 and self._token_refresher:
             self._refresh_token()
-            resp = self._session.get(url, timeout=30, **kwargs)
+            return retry_fn()
+        if resp.status_code == 429:
+            retry_after = int(resp.headers.get("Retry-After", 30))
+            import logging
+            logging.getLogger("photo_sorter").warning(
+                f"  429 Too Many Requests — backing off {retry_after}s"
+            )
+            time.sleep(retry_after)
+            return retry_fn()
+        return None  # no retry needed
+
+    def _get(self, url: str, **kwargs) -> dict:
+        resp = self._session.get(url, timeout=30, **kwargs)
+        if resp.status_code in (401, 429):
+            retried = self._handle_retry(resp, lambda: self._session.get(url, timeout=30, **kwargs))
+            if retried is not None:
+                resp = retried
         resp.raise_for_status()
         return resp.json()
 
     def _post(self, url: str, json: dict) -> dict:
         resp = self._session.post(url, json=json, timeout=30)
-        if resp.status_code == 401 and self._token_refresher:
-            self._refresh_token()
-            resp = self._session.post(url, json=json, timeout=30)
+        if resp.status_code in (401, 429):
+            retried = self._handle_retry(resp, lambda: self._session.post(url, json=json, timeout=30))
+            if retried is not None:
+                resp = retried
         resp.raise_for_status()
         return resp.json()
 
     def _put(self, url: str, data: bytes) -> dict:
-        resp = self._session.put(
-            url,
-            data=data,
-            headers={
-                "Authorization": f"Bearer {self._token}",
-                "Content-Type": "application/octet-stream",
-            },
-            timeout=120,
-        )
-        if resp.status_code == 401 and self._token_refresher:
-            self._refresh_token()
-            resp = self._session.put(
-                url,
-                data=data,
-                headers={
+        headers = {
+            "Authorization": f"Bearer {self._token}",
+            "Content-Type": "application/octet-stream",
+        }
+        resp = self._session.put(url, data=data, headers=headers, timeout=120)
+        if resp.status_code in (401, 429):
+            retried = self._handle_retry(
+                resp,
+                lambda: self._session.put(url, data=data, headers={
                     "Authorization": f"Bearer {self._token}",
                     "Content-Type": "application/octet-stream",
-                },
-                timeout=120,
+                }, timeout=120)
             )
+            if retried is not None:
+                resp = retried
         resp.raise_for_status()
         return resp.json()
 
