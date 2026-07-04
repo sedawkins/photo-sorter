@@ -175,7 +175,13 @@ different photos would land in the same destination folder with the same name,
 - **HEIC files:** converted to JPEG at copy time (winners only, after dedup)
 - **Video files (.mov, .mp4, .avi, .mkv):** organized into `Year/Movies/` and
   `Location/Movies/` folders (Phase 2) — currently skipped
-- **Non-image files (.nar, .tln, etc.):** silently skipped
+- **Non-image files (.nar, .tln, etc.):** silently skipped by `scan.py` (no
+  recognized image/movie extension) — has no effect on production runs
+- **`Data.noindex` folders:** skipped entirely during scan (see
+  `SKIP_FOLDER_NAMES` in `graph.py`) — this is iPhoto's internal preview
+  cache and its files carry a real `.jpg` extension, so it needs an explicit
+  folder-name exclusion rather than an extension check. See "Source cleanup
+  utility" below.
 - All other formats (JPG, PNG, TIFF, BMP, WebP) are copied as-is
 
 ---
@@ -220,8 +226,10 @@ CREATE TABLE photos (
     camera_model       TEXT,
     folder_description TEXT,               -- auto-extracted from source folder name
     user_description   TEXT,               -- free text added manually
-    status             TEXT,               -- 'scanned', 'organized', 'unsorted'
-    processed_at       TEXT                -- ISO 8601 timestamp
+    status             TEXT,               -- 'scanned', 'organized', 'soft_duplicate'
+    processed_at       TEXT,               -- ISO 8601 timestamp
+    media_type         TEXT,               -- 'photo' or 'movie'
+    file_size          INTEGER             -- bytes, used for soft duplicate detection
 );
 
 CREATE TABLE photo_occurrences (
@@ -366,11 +374,66 @@ inform Phase 2 design decisions.
 - Scoped by geo+date to minimize cost (e.g. California photos, 2005–2017 for Tucker)
 - Query example: `WHERE country='US' AND state='California' AND year BETWEEN 2005 AND 2017 AND tag='labrador'`
 
-#### 2f. Source cleanup utility
-- Propose deletions from source `/Pictures` for user review before committing:
-  - Non-image cruft files (`.nar`, `.tln`, `.tmp`, etc.)
-  - Thumbnail detection (small dimensions or tiny file size matching a larger copy)
-- Show proposed deletions, require explicit confirmation before any delete
+#### 2f. Source cleanup utility ✅ DONE (2026-07-04)
+
+`cleanup_kruft.py` scans a Pictures tree and quarantines (never deletes) files
+that are confirmed junk — cache/metadata files left behind by iPhoto, iPod
+Photo Cache, Windows, and Picasa. It never touches the source photos
+themselves; everything lands in a `_KRUFT_QUARANTINE/` folder that mirrors
+the original structure, with a CSV manifest of every proposed move. Dry-run
+by default; `--execute` required to actually move anything.
+
+**Kruft types identified and quarantined automatically:**
+- `.ithmb` — iPod Photo Cache thumbnail blobs (many are 0 bytes)
+- `.ipmeta` — iPhoto per-album metadata sidecars
+- `.data`/`.db`/`.xml` — iPhoto Library internal DB/segment files, matched by
+  an exact filename whitelist (not extension alone — an unrecognized `.db` is
+  flagged for review, not assumed safe)
+- `.ini`, `.url`, `.lnk`, `.iphoto` — Windows/Picasa folder metadata and shortcuts
+- `.thm`/`.tnl`/`.thumb` — Windows Phone/camcorder preview sidecars, but
+  **only** when a same-basename real media file exists alongside them
+  (proves redundancy; an orphaned sidecar is held for manual review instead)
+- `Data.noindex/` folders — see below
+
+**Important finding — `.nar` is NOT junk.** Windows Phone "Rich Capture"
+`.nar` files look like cache files but are actually ZIP archives containing
+multiple unique JPEG exposures (`NaturalHDR.jpg`, `ArtisticHDR.jpg`,
+`EV0.jpg`) that don't exist anywhere else. `cleanup_kruft.py` deliberately
+excludes `.nar` from auto-quarantine and always routes it to manual review.
+
+**Important finding — `Data.noindex` leaked into the pipeline's own output.**
+iPhoto's `Data.noindex` folder is an internal preview-render cache: every
+file in it, including ones with a real `.jpg` extension (e.g. face-detection
+crops named `<photo>_faceN.jpg`), is a low-res, no-EXIF derivative of a photo
+that already exists in the same Library's `Originals` folder. Because these
+carry a real image extension, `scan.py` correctly (by its own rules) treated
+them as legitimate photos with no metadata, and because they have no EXIF at
+all, soft-duplicate detection (which matches on date/camera) couldn't pair
+them with the real original either. Result: **5,155 files (~2 GB) had
+accumulated in `Photos/Sorted/Unsorted`** — 90% of everything in that folder
+— despite every one of them being a confirmed-redundant derivative of a
+photo already organized elsewhere. Verified via DB query (every occurrence
+of the affected hashes traced back to a `Data.noindex` path) and spot-checked
+8 random samples for a matching real original by filename — all 8 confirmed.
+Cleaned up on 2026-07-04: physical files removed, `photo_occurrences` and
+orphaned `photos` rows deleted, same pattern as the earlier ghost-record
+cleanup. `Unsorted` went from 5,736 rows down to 581 genuinely-unsorted
+photos. Fixed at the source: `graph.py`'s `list_photos()` now skips any
+folder named `Data.noindex` during the recursive listing
+(`SKIP_FOLDER_NAMES`), so a future re-scan can't reintroduce these.
+
+**Safety rules the tool enforces:**
+1. A hard whitelist of real media/document extensions is checked first and
+   always wins — no kruft rule can override it, *except* the narrow,
+   deliberate `Data.noindex` directory-name override described above.
+2. Extension name alone is never trusted for ambiguous types — `.db`/`.xml`
+   require an exact filename match; sidecars require a paired real file in
+   the same folder.
+3. A size ceiling per kruft type demotes an oversized "cache" file to manual
+   review instead of auto-quarantining it — the same principle that would
+   catch a future `.nar`-style surprise even under a known extension.
+4. Move-only, manifest-logged, dry-run-by-default, same-volume quarantine —
+   nothing is ever deleted by this tool.
 
 ---
 

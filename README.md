@@ -21,5 +21,10 @@ Future enhancements:
 8.   Email summary on run completion
 9.   Additional folder scans after this run
 10.   Phase 4 incremental import for new photos
-11.   Cleanup cruft (non-image files) (e.g., Windows phone .nar, .tln and other non-image files)
-12.   Thumbnail detection (small dimensions + size threshold, with safety checks)
+11.   Cleanup cruft (non-image files) — DONE, see `cleanup_kruft.py` and SPEC.md's
+      "Source cleanup utility" section. Note: Windows Phone `.nar` files turned out
+      to NOT be junk — they're ZIP bundles containing unique alternate-exposure
+      JPEGs, so they're excluded from auto-cleanup and flagged for manual review.
+12.   Thumbnail detection (small dimensions + size threshold, with safety checks) —
+      DONE as part of `cleanup_kruft.py` (sidecar pairing + size-ceiling checks) and
+      the `Data.noindex` preview-cache exclusion added to `graph.py`.

@@ -14,6 +14,14 @@ IMAGE_EXTENSIONS = {
 }
 MOVIE_EXTENSIONS = {".mov", ".mp4", ".avi", ".mkv", ".m4v", ".wmv"}
 
+# Folders that are internal app caches, not photo content — never recurse
+# into these. "Data.noindex" is iPhoto's internal preview-render cache: every
+# file in it is a low-res, no-EXIF derivative of a photo already present in
+# the library's "Originals" folder, so it carries a real .jpg extension but
+# no unique content. Confirmed by inspection on the production library —
+# see SPEC.md "Source cleanup utility" for details.
+SKIP_FOLDER_NAMES = {"data.noindex"}
+
 
 class GraphClient:
     def __init__(self, token: str, token_refresher=None):
@@ -95,6 +103,8 @@ class GraphClient:
             data = self._get(url)
             for item in data.get("value", []):
                 if "folder" in item:
+                    if item["name"].lower() in SKIP_FOLDER_NAMES:
+                        continue
                     sub_path = (
                         item["parentReference"]["path"].replace("/drive/root:", "")
                         + "/" + item["name"]
