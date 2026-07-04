@@ -3,3 +3,5 @@ requests
 Pillow
 pillow-heif
 reverse_geocoder
+fastapi
+uvicorn

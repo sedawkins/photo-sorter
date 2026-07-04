@@ -28,3 +28,9 @@ Future enhancements:
 12.   Thumbnail detection (small dimensions + size threshold, with safety checks) —
       DONE as part of `cleanup_kruft.py` (sidecar pairing + size-ceiling checks) and
       the `Data.noindex` preview-cache exclusion added to `graph.py`.
+13.   Read-only "muse" GUI — DONE, see `gui/`. A local, read-only web app to browse
+      the organized archive: years, places, dedup stats, and a resurfaced-memory card.
+      Runs `uvicorn gui.server:app` and reads a snapshot of the metadata DB; photo
+      previews are fetched as on-demand Graph thumbnails, never bulk-downloaded.
+      Architected to deploy to Vercel later. Does not write to the DB — the
+      location-tagging utility (item 6 above) is still a separate, pending build.

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Photo archive — a place to muse</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
+  <noscript><link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" /></noscript>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <span class="mark">Photo archive</span>
+      <span class="sub">a place to muse</span>
+      <nav>
+        <a href="#years">Years</a>
+        <a href="#places">Places</a>
+        <a href="#story">The work</a>
+        <a href="#memory">Wander</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap" id="app">
+    <section class="hero" id="top">
+      <div>
+        <p class="eyebrow">The archive</p>
+        <h1 id="hero-title">Thirty years, finally in one order.</h1>
+        <p class="lede" id="hero-lede">Loading…</p>
+        <div class="figures" id="hero-figures"></div>
+      </div>
+      <figure class="hero-photo" id="hero-photo">
+        <figcaption class="cap" id="hero-cap"></figcaption>
+      </figure>
+    </section>
+
+    <section id="years">
+      <p class="eyebrow">Years</p>
+      <h2>The shape of the years</h2>
+      <p class="lede">Where life clustered — and where it went quiet. Click a year to wander into it.</p>
+      <div class="ribbon" id="ribbon"></div>
+      <div class="axis" id="axis"></div>
+    </section>
+
+    <section id="places">
+      <p class="eyebrow">Places</p>
+      <h2>Where the photos are</h2>
+      <p class="lede">Home towering over everywhere else, and the trips scattered between. Click a place to see it.</p>
+      <div class="places">
+        <div id="map"></div>
+        <div class="placelist" id="placelist"></div>
+      </div>
+    </section>
+
+    <section id="story">
+      <p class="eyebrow">The work we did</p>
+      <h2>From chaos into order</h2>
+      <p class="lede">Years of copies, thumb drives, and cloud migrations — sifted down to what's worth keeping.</p>
+      <div class="flow" id="flow"></div>
+      <div class="propbar" id="propbar"></div>
+      <div class="proplabels" id="proplabels"></div>
+      <div class="aside" id="aside"></div>
+    </section>
+
+    <section id="memory">
+      <p class="eyebrow">Wander</p>
+      <h2>A resurfaced memory</h2>
+      <p class="lede">Something to stumble on, rather than search for.</p>
+      <div class="memory">
+        <figure class="frame" id="mem-frame"></figure>
+        <div>
+          <div class="cap" id="mem-cap">…</div>
+          <div class="sub" id="mem-sub"></div>
+          <button id="mem-again">Show me another</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid-view" id="grid-view">
+      <div class="grid-head">
+        <h2 id="grid-title"></h2>
+        <span class="count mono" id="grid-count"></span>
+        <button class="back" id="grid-back">← Back</button>
+      </div>
+      <div class="grid" id="grid"></div>
+      <div class="more"><button id="grid-more" style="display:none">Load more</button></div>
+    </section>
+
+    <div class="foot">
+      Read-only. Built from the local metadata index; photos stay in OneDrive and load as
+      thumbnails only when you look at them.
+    </div>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
