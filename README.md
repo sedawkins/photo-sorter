@@ -32,7 +32,7 @@ Completed enhancements:
 Future enhancements (backlog):
 1.   Location tagging utility — A write-enabled GUI (Vercel app) to batch-tag the
      ~11,000 pre-GPS photos in Year/Month/Other by date+camera group. User picks a
-     location, photos are re-organized into the geo hierarchy.
+     location, photos are re-organized into the geo hierarchy. See GUI_SPEC.md.
 2.   Connectors to pull picture folders from other places like Google Drive or DropBox.
 4.   Shadow shortcuts instead of full copies (+ orphan cleanup utility).
 6.   AI image tagging (Azure Computer Vision, queryable tags in DB — enables Tucker/dog search).

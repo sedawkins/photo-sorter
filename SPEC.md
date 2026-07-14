@@ -359,13 +359,12 @@ inform Phase 2 design decisions.
 - Shortcuts are deleted automatically when source is deleted — no orphan problem
 - Write a one-time migration utility to convert existing Shadow copies to shortcuts
 
-#### 2d. Location tagging web app (Vercel)
-- Group un-located photos by `(camera_make, camera_model, taken_date)`
-- Show a sample grid of photos from each group
-- User manually assigns a location — updates DB and moves photos from `Other/`
-  into the correct `State/City/` position in both hierarchies
-- Built on Vercel (Next.js), calls Graph API via backend for photo display
-- Auth via existing Azure App Registration
+#### 2d. Location tagging web app (Vercel) — see GUI_SPEC.md
+- Three-view SPA: browse by Date, browse by Location, tag unlocated clumps
+- Hosted on Vercel (free Hobby tier); backend FastAPI runs on Azure VM
+- DB stays on VM co-located with OneDrive — no sync to external service needed
+- Phased: Phase 1 = browse views (replaces Muse GUI); Phase 2 = tag view (write-enabled)
+- See `GUI_SPEC.md` for full design and architecture
 
 #### 2e. AI image tagging
 - Run organized photos through Azure Computer Vision
@@ -449,8 +448,13 @@ folder named `Data.noindex` during the recursive listing
 
 ## Future Enhancements
 
-- **Parallel copy optimization:** `ThreadPoolExecutor` with 2-3 workers to reduce
-  organize run time (currently ~4-7 sec/photo); validate against OneDrive throttling first
-- **Collision counter:** add to organize summary stats
+- **Parallel copy optimization:** ✅ DONE — `ThreadPoolExecutor(max_workers=3)`,
+  per-thread GraphClient + SQLite connection, 429 backoff with `Retry-After`
+- **Collision counter:** ✅ DONE — shown in organize summary stats
+- **Shadow shortcuts:** replace full Shadow copies with OneDrive shortcuts (~30GB savings)
 - **Email summary:** send on run completion via SMTP
+- **AI image tagging:** Azure Computer Vision tags stored in `photo_tags` table;
+  enables Tucker/dog search scoped by geo+date
+- **iCloud integration:** Apple Privacy export → OneDrive folder → standard scan/organize
+- **Soft duplicate review UI:** Vercel — show near-duplicate pairs side by side for confirmation
 - **Purge utility:** find and remove orphaned Shadow shortcuts or stale DB entries
