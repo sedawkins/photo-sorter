@@ -1,5 +1,8 @@
 {
   "framework": null,
   "outputDirectory": "tagger/static",
-  "buildCommand": ""
+  "buildCommand": "",
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/api/proxy.js" }
+  ]
 }
