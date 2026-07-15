@@ -149,6 +149,8 @@ def thumbnail(path: str, conn=Depends(get_db)):
 
     token = result["access_token"]
     from urllib.parse import quote
+    if not path.startswith("/"):
+        path = SORTED_ROOT.rstrip("/") + "/" + path
     encoded = quote(path, safe="/")
     url = f"https://graph.microsoft.com/v1.0/me/drive/root:{encoded}:/thumbnails/0/medium/content"
     resp = requests.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=30)
