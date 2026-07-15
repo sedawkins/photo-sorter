@@ -2,14 +2,75 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Photo Sorter</title>
-  <style>
-    body { font-family: sans-serif; display: flex; align-items: center;
-           justify-content: center; height: 100vh; margin: 0; background: #fafafa; }
-    h1 { font-size: 1.5rem; color: #333; }
-  </style>
+  <link rel="stylesheet" href="styles.css">
+  <!-- API config — set these as Vercel env vars rendered server-side, or override here for local dev -->
+  <script>
+    window.API_BASE = "";   /* e.g. "https://photo-sorter-vm.westus2.cloudapp.azure.com:8000" */
+    window.PHOTO_API_KEY = "";  /* set to your API key */
+  </script>
 </head>
 <body>
-  <h1>Photo Sorter — coming soon</h1>
+
+<nav>
+  <span class="nav-title">📷 Photo Sorter</span>
+  <button class="nav-btn active" id="btn-date">
+    📅 Date
+  </button>
+  <button class="nav-btn" id="btn-location">
+    🌍 Location
+  </button>
+</nav>
+
+<main>
+
+  <!-- ── Stats hero ─────────────────────────────────────────────────────────── -->
+  <div class="stats-grid" style="margin-bottom:40px">
+    <div class="stat-card">
+      <div class="stat-value" id="stat-organized">—</div>
+      <div class="stat-label">Organized</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="stat-with-location">—</div>
+      <div class="stat-label">With Location</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="stat-date-only">—</div>
+      <div class="stat-label">Date Only</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="stat-movies">—</div>
+      <div class="stat-label">Movies</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="stat-duplicates">—</div>
+      <div class="stat-label">Dups Skipped</div>
+    </div>
+  </div>
+
+  <!-- ── Date view ──────────────────────────────────────────────────────────── -->
+  <div class="view active" id="view-date">
+    <div class="section-header" id="date-header">
+      <span class="section-title">Browse by Date</span>
+    </div>
+    <div id="date-content">
+      <div class="empty">Loading…</div>
+    </div>
+  </div>
+
+  <!-- ── Location view ──────────────────────────────────────────────────────── -->
+  <div class="view" id="view-location">
+    <div class="section-header" id="location-header">
+      <span class="section-title">Browse by Location</span>
+    </div>
+    <div id="location-content">
+      <div class="empty">Loading…</div>
+    </div>
+  </div>
+
+</main>
+
+<script src="app.js"></script>
 </body>
 </html>

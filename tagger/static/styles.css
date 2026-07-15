@@ -1,0 +1,288 @@
+/* Photo Sorter — Geist-inspired: monochrome, whitespace, hairlines */
+
+:root {
+  --bg: #ffffff;
+  --surface: #f9f9f9;
+  --border: #e5e5e5;
+  --text: #111111;
+  --muted: #888888;
+  --accent: #0070f3;
+  --radius: 8px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --mono: "SF Mono", "Fira Code", monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0a0a0a;
+    --surface: #111111;
+    --border: #2a2a2a;
+    --text: #ededed;
+    --muted: #666666;
+    --accent: #3291ff;
+  }
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* ── Nav ───────────────────────────────────────────────────────────────────── */
+
+nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 24px;
+  height: 56px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 10;
+}
+
+.nav-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin-right: auto;
+}
+
+.nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  font-family: var(--font);
+  transition: background 0.15s;
+}
+
+.nav-btn:hover { background: var(--surface); }
+.nav-btn.active {
+  background: var(--text);
+  color: var(--bg);
+  border-color: var(--text);
+}
+
+/* ── Layout ────────────────────────────────────────────────────────────────── */
+
+main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+.view { display: none; }
+.view.active { display: block; }
+
+/* ── Hero stats ────────────────────────────────────────────────────────────── */
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: 40px;
+}
+
+.stat-card {
+  padding: 20px 24px;
+  background: var(--surface);
+}
+
+.stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  font-family: var(--mono);
+  letter-spacing: -1px;
+}
+
+.stat-label {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 2px;
+}
+
+/* ── Section headers ───────────────────────────────────────────────────────── */
+
+.section-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.section-title {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.back-link {
+  font-size: 12px;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.back-link:hover { text-decoration: underline; }
+
+/* ── Year / month cards ────────────────────────────────────────────────────── */
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 1px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: 32px;
+}
+
+.card {
+  padding: 18px 16px;
+  background: var(--surface);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.card:hover { background: var(--border); }
+
+.card-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.card-count {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+/* ── Photo grid ────────────────────────────────────────────────────────────── */
+
+.location-group { margin-bottom: 32px; }
+
+.location-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 4px;
+}
+
+.photo-tile {
+  aspect-ratio: 1;
+  background: var(--surface);
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: pointer;
+  position: relative;
+}
+
+.photo-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.photo-tile .loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+/* ── Location list ─────────────────────────────────────────────────────────── */
+
+.location-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: 32px;
+}
+
+.location-row {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--surface);
+  cursor: pointer;
+  gap: 12px;
+  transition: background 0.12s;
+}
+
+.location-row:hover { background: var(--border); }
+
+.location-name { flex: 1; font-weight: 500; }
+.location-sub  { font-size: 12px; color: var(--muted); }
+.location-count {
+  font-size: 12px;
+  font-family: var(--mono);
+  color: var(--muted);
+  min-width: 40px;
+  text-align: right;
+}
+
+/* ── Loading / empty states ────────────────────────────────────────────────── */
+
+.empty {
+  padding: 48px;
+  text-align: center;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border);
+  border-top-color: var(--text);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  vertical-align: middle;
+  margin-right: 8px;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Responsive ────────────────────────────────────────────────────────────── */
+
+@media (max-width: 600px) {
+  nav { padding: 0 12px; }
+  main { padding: 20px 12px; }
+  .photo-grid { grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); }
+}
