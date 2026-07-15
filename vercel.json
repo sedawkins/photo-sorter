@@ -1,4 +1,5 @@
 {
+  "framework": null,
   "outputDirectory": "tagger/static",
-  "buildCommand": null
+  "buildCommand": ""
 }
