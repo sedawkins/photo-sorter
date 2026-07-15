@@ -212,6 +212,10 @@ The existing `gui/` folder (Muse GUI) is retired in favor of `tagger/`.
 - Soft duplicate review: side-by-side pair viewer, confirm/reject
 - AI tag search: find Tucker, find beach photos, etc.
 - Mobile-responsive layout for phone use
+- **Photo curation / delete:** mark individual photos as "uninteresting" (blurry, accidental,
+  redundant) from the browse grid. Moves the file to a `/Photos/Trash/` folder in OneDrive
+  (never hard-deletes) and marks `status='trashed'` in DB so organize.py skips it.
+  OneDrive recycle bin provides a second safety net before permanent deletion.
 
 ---
 
