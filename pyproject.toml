@@ -1,2 +1,3 @@
-[tool.vercel]
-entrypoint = "gui/server.py:app"
+# pyproject.toml — Python project metadata
+# Note: the FastAPI backend (tagger/server.py) runs on the Azure VM, not Vercel.
+# Vercel hosts only the static frontend (tagger/static/).
