@@ -226,7 +226,7 @@ function renderPhotoGroups(photos) {
     <div class="location-group">
       <div class="location-label">${label}</div>
       <div class="photo-grid">${items.map(p => `
-        <div class="photo-tile" data-path="${esc(p.new_path)}">
+        <div class="photo-tile" data-path="${esc(p.new_path)}" onclick="openLightbox('${esc(p.new_path)}')">
           <div class="loading">…</div>
         </div>`).join("")}
       </div>
@@ -250,6 +250,37 @@ function lazyLoadThumbs(container) {
   }, { rootMargin: "200px" });
   tiles.forEach(t => obs.observe(t));
 }
+
+// ── Lightbox ──────────────────────────────────────────────────────────────────
+
+(function() {
+  const overlay = document.createElement("div");
+  overlay.id = "lightbox";
+  overlay.innerHTML = `
+    <div id="lightbox-backdrop"></div>
+    <div id="lightbox-content">
+      <button id="lightbox-close">✕</button>
+      <div id="lightbox-spinner"></div>
+      <img id="lightbox-img" alt="">
+    </div>`;
+  document.body.appendChild(overlay);
+
+  function close() { overlay.classList.remove("open"); }
+  overlay.querySelector("#lightbox-backdrop").addEventListener("click", close);
+  overlay.querySelector("#lightbox-close").addEventListener("click", close);
+  document.addEventListener("keydown", e => { if (e.key === "Escape") close(); });
+
+  window.openLightbox = function(path) {
+    const img = overlay.querySelector("#lightbox-img");
+    const spinner = overlay.querySelector("#lightbox-spinner");
+    img.style.display = "none";
+    spinner.style.display = "block";
+    overlay.classList.add("open");
+    img.onload = () => { spinner.style.display = "none"; img.style.display = "block"; };
+    img.onerror = () => { spinner.style.display = "none"; img.alt = "Could not load photo."; img.style.display = "block"; };
+    img.src = API_BASE + "/api/photo?path=" + encodeURIComponent(path);
+  };
+})();
 
 // ── Utils ─────────────────────────────────────────────────────────────────────
 

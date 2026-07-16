@@ -279,6 +279,58 @@ main {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ── Lightbox ──────────────────────────────────────────────────────────────── */
+
+#lightbox { display: none; }
+#lightbox.open { display: block; }
+
+#lightbox-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  z-index: 100;
+}
+
+#lightbox-content {
+  position: fixed;
+  inset: 0;
+  z-index: 101;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#lightbox-img {
+  max-width: 92vw;
+  max-height: 92vh;
+  border-radius: var(--radius);
+  box-shadow: 0 8px 48px rgba(0,0,0,0.6);
+  display: none;
+}
+
+#lightbox-close {
+  position: fixed;
+  top: 16px;
+  right: 20px;
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 24px;
+  cursor: pointer;
+  z-index: 102;
+  opacity: 0.8;
+}
+#lightbox-close:hover { opacity: 1; }
+
+#lightbox-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
 /* ── Responsive ────────────────────────────────────────────────────────────── */
 
 @media (max-width: 600px) {

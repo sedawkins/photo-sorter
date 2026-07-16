@@ -111,28 +111,14 @@ def photos_by_location(country: str, city: str,
     return get_photos_by_location(conn, city, country, year, month, limit, offset)
 
 
-@app.get("/api/thumb", dependencies=[Depends(require_api_key)])
-def thumbnail(path: str, conn=Depends(get_db)):
-    """
-    Fetch a ~200px thumbnail for a photo via the Graph API.
-    Results are disk-cached by path hash so repeat requests are instant.
-    """
-    import hashlib, json, msal
-
-    cache_key = hashlib.md5(path.encode()).hexdigest()
-    cache_file = THUMB_CACHE_DIR / f"{cache_key}.jpg"
-    if cache_file.exists():
-        return Response(content=cache_file.read_bytes(), media_type="image/jpeg")
-
-    # Load token from MSAL cache
+def _graph_token() -> str:
+    import json, msal
     token_cache_path = SYSTEM_DIR / "token_cache.json"
     config_path = SYSTEM_DIR / "config.json"
     if not token_cache_path.exists() or not config_path.exists():
         raise HTTPException(status_code=503, detail="Auth not configured on VM")
-
     with open(config_path) as f:
         config = json.load(f)
-
     cache = msal.SerializableTokenCache()
     cache.deserialize(token_cache_path.read_text())
     pca = msal.PublicClientApplication(
@@ -146,20 +132,46 @@ def thumbnail(path: str, conn=Depends(get_db)):
     result = pca.acquire_token_silent(["Files.Read.All"], account=accounts[0])
     if not result or "access_token" not in result:
         raise HTTPException(status_code=503, detail="Could not acquire token silently")
+    return result["access_token"]
 
-    token = result["access_token"]
+
+def _onedrive_path(path: str) -> str:
     from urllib.parse import quote
     if not path.startswith("/"):
         path = SORTED_ROOT.rstrip("/") + "/" + path
-    encoded = quote(path, safe="/")
+    return quote(path, safe="/")
+
+
+@app.get("/api/thumb", dependencies=[Depends(require_api_key)])
+def thumbnail(path: str, conn=Depends(get_db)):
+    import hashlib
+    cache_key = hashlib.md5(path.encode()).hexdigest()
+    cache_file = THUMB_CACHE_DIR / f"{cache_key}.jpg"
+    if cache_file.exists():
+        return Response(content=cache_file.read_bytes(), media_type="image/jpeg")
+
+    token = _graph_token()
+    encoded = _onedrive_path(path)
     url = f"https://graph.microsoft.com/v1.0/me/drive/root:{encoded}:/thumbnails/0/medium/content"
     resp = requests.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=30)
     if resp.status_code == 404:
         raise HTTPException(status_code=404, detail="Photo not found in OneDrive")
     resp.raise_for_status()
-
     cache_file.write_bytes(resp.content)
     return Response(content=resp.content, media_type="image/jpeg")
+
+
+@app.get("/api/photo", dependencies=[Depends(require_api_key)])
+def photo(path: str):
+    token = _graph_token()
+    encoded = _onedrive_path(path)
+    url = f"https://graph.microsoft.com/v1.0/me/drive/root:{encoded}:/content"
+    resp = requests.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=60)
+    if resp.status_code == 404:
+        raise HTTPException(status_code=404, detail="Photo not found in OneDrive")
+    resp.raise_for_status()
+    content_type = resp.headers.get("content-type", "image/jpeg")
+    return Response(content=resp.content, media_type=content_type)
 
 
 @app.get("/api/health")
