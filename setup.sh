@@ -56,6 +56,28 @@ fi
 # ── Shell convenience ─────────────────────────────────────────────────────────
 grep -qxF "cd ~/photo-sorter" "$HOME/.bashrc" || echo 'cd ~/photo-sorter' >> "$HOME/.bashrc"
 grep -qxF "source ~/photo-sorter/.venv/bin/activate" "$HOME/.bashrc" || echo 'source ~/photo-sorter/.venv/bin/activate' >> "$HOME/.bashrc"
+grep -qxF "export SORTED_ROOT=" "$HOME/.bashrc" || echo 'export SORTED_ROOT="/Photos/Sorted/Primary"' >> "$HOME/.bashrc"
+
+# ── Systemd service ───────────────────────────────────────────────────────────
+echo
+echo "[4b] Installing systemd service..."
+sudo tee /etc/systemd/system/photo-sorter.service > /dev/null <<EOF
+[Unit]
+Description=Photo Sorter API
+After=network.target
+
+[Service]
+User=$USER
+WorkingDirectory=$APP_DIR
+Environment="SORTED_ROOT=/Photos/Sorted/Primary"
+ExecStart=$VENV/bin/uvicorn tagger.server:app --host 0.0.0.0 --port 8000
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+EOF
+sudo systemctl daemon-reload
+sudo systemctl enable photo-sorter
 
 # ── Auth & OneDrive sync ──────────────────────────────────────────────────────
 echo
