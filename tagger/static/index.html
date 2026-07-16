@@ -9,6 +9,18 @@
   <script>
     window.API_BASE = "";  /* proxy routes /api/* through Vercel to the VM */
     window.PHOTO_API_KEY = "";  /* set to your API key */
+
+    (function() {
+      const CODE = "Dawkins0409";
+      if (sessionStorage.getItem("auth") !== CODE) {
+        const entry = prompt("Enter passcode to view family photos:");
+        if (entry !== CODE) {
+          document.write("<h2 style='font-family:sans-serif;padding:40px'>Incorrect passcode.</h2>");
+          throw new Error("auth");
+        }
+        sessionStorage.setItem("auth", CODE);
+      }
+    })();
   </script>
 </head>
 <body>
