@@ -140,7 +140,12 @@ async function loadLocations() {
     const mapped = locs.filter(l => l.lat && l.lon);
     if (mapped.length) {
       if (_map) { _map.remove(); _map = null; }
-      _map = L.map("location-map", { zoomControl: true });
+      _map = L.map("location-map", {
+        zoomControl: true,
+        worldCopyJump: false,
+        maxBounds: [[-90, -180], [90, 180]],
+        maxBoundsViscosity: 1.0,
+      });
       L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
         attribution: "© OpenStreetMap © CARTO",
         maxZoom: 14,
