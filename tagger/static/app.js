@@ -291,7 +291,7 @@ function renderPhotoGroups(photos) {
     <div class="location-group">
       <div class="location-label">${label}</div>
       <div class="photo-grid">${items.map(p => `
-        <div class="photo-tile" data-path="${esc(p.new_path)}" onclick="openLightbox('${esc(p.new_path)}')">
+        <div class="photo-tile" data-path="${escAttr(p.new_path)}" onclick="openLightbox('${esc(p.new_path)}')">
           <div class="loading">…</div>
         </div>`).join("")}
       </div>
@@ -349,7 +349,7 @@ function renderClumpList() {
             <div class="clump-camera">${c.cam_make} ${c.cam_model} · ${c.photo_count} photos</div>
           </div>
           <div class="clump-thumbs">
-            ${c.sample_paths.map(p => `<div class="clump-thumb" data-path="${esc(p)}"><div class="loading">…</div></div>`).join("")}
+            ${c.sample_paths.map(p => `<div class="clump-thumb" data-path="${escAttr(p)}"><div class="loading">…</div></div>`).join("")}
           </div>
           ${selectedClump === i ? renderClumpDetail(c, i) : ""}
         </div>`).join("")}
@@ -480,6 +480,10 @@ async function tagClump(e, i) {
 
 function esc(s) {
   return String(s || "").replace(/'/g, "\\'").replace(/"/g, "&quot;");
+}
+
+function escAttr(s) {
+  return String(s || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
