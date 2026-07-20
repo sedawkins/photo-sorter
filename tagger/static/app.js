@@ -367,7 +367,7 @@ function renderClumpList() {
 function renderClumpDetail(c, i) {
   const hint = c.ai_hint ? `<div class="clump-hint">🤖 ${esc(c.ai_hint)}</div>` : "";
   return `
-    <div class="clump-detail">
+    <div class="clump-detail" onclick="event.stopPropagation()">
       ${hint}
       <div class="clump-actions">
         <button class="btn btn--secondary" id="scan-btn-${i}" onclick="scanClump(event, ${i})">🔍 Scan for clues</button>
