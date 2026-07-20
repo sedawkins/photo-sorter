@@ -14,7 +14,7 @@ export default async function handler(req, res) {
 
   let vmResp;
   try {
-    vmResp = await fetch(target, { headers, signal: AbortSignal.timeout(30000) });
+    vmResp = await fetch(target, { headers, signal: AbortSignal.timeout(55000) });
   } catch (err) {
     res.status(502).json({ error: "VM unreachable", detail: err.message });
     return;
