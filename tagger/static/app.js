@@ -349,7 +349,7 @@ function renderClumpList() {
             <div class="clump-camera">${c.cam_make} ${c.cam_model} · ${c.photo_count} photos</div>
           </div>
           <div class="clump-thumbs">
-            ${c.sample_paths.map(p => `<div class="clump-thumb" data-path="${escAttr(p)}"><div class="loading">…</div></div>`).join("")}
+            ${c.sample_paths.map(p => `<div class="clump-thumb" data-path="${escAttr(p)}" onclick="event.stopPropagation();openLightbox('${esc(p)}')"><div class="loading">…</div></div>`).join("")}
           </div>
           ${selectedClump === i ? renderClumpDetail(c, i) : ""}
         </div>`).join("")}
