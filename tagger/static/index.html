@@ -12,17 +12,6 @@
     window.API_BASE = "";  /* proxy routes /api/* through Vercel to the VM */
     window.PHOTO_API_KEY = "";  /* set to your API key */
 
-    (function() {
-      const CODE = "Dawkins0409";
-      if (sessionStorage.getItem("auth") !== CODE) {
-        const entry = prompt("Enter passcode to view family photos:");
-        if (entry !== CODE) {
-          document.write(`<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f9f9f9;}p{color:#555;font-size:15px;}</style></head><body><p>Incorrect passcode. Please try again.</p></body></html>`);
-          document.close();
-        }
-        sessionStorage.setItem("auth", CODE);
-      }
-    })();
   </script>
 </head>
 <body>

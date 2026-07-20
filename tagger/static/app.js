@@ -1,5 +1,18 @@
 /* Photo Sorter — SPA frontend (Phase 1: Date + Location browse views) */
 
+// ── Passcode gate ─────────────────────────────────────────────────────────────
+(function() {
+  const CODE = "Dawkins0409";
+  if (sessionStorage.getItem("auth") !== CODE) {
+    const entry = prompt("Enter passcode to view family photos:");
+    if (entry !== CODE) {
+      document.body.innerHTML = `<div style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;color:#555;font-size:15px;">Incorrect passcode. Please try again.</div>`;
+      throw new Error("auth");
+    }
+    sessionStorage.setItem("auth", CODE);
+  }
+})();
+
 const API_KEY = window.PHOTO_API_KEY || "";
 const API_BASE = window.API_BASE || "";  // e.g. "https://photo-sorter-vm.westus2.cloudapp.azure.com:8000"
 
