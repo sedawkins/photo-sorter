@@ -37,15 +37,17 @@ let locationStack = [];      // [] | [country, city] | [country, city, year, mon
 
 // ── Nav ───────────────────────────────────────────────────────────────────────
 
-document.getElementById("btn-date").addEventListener("click", () => showView("date"));
-document.getElementById("btn-location").addEventListener("click", () => showView("location"));
-
 function showView(view) {
   currentView = view;
   document.querySelectorAll(".view").forEach(el => el.classList.remove("active"));
-  document.querySelectorAll(".nav-btn").forEach(el => el.classList.remove("active"));
   document.getElementById("view-" + view).classList.add("active");
-  document.getElementById("btn-" + view).classList.add("active");
+
+  const back = document.getElementById("nav-back");
+  if (view === "home") {
+    back.innerHTML = "";
+  } else {
+    back.innerHTML = `<a class="nav-back-link" onclick="showView('home')">← Home</a>`;
+  }
 
   if (view === "date" && dateStack.length === 0) loadYears();
   if (view === "location" && locationStack.length === 0) loadLocations();
@@ -313,16 +315,7 @@ function lazyLoadThumbs(container) {
 // ── Lightbox ──────────────────────────────────────────────────────────────────
 
 (function() {
-  const overlay = document.createElement("div");
-  overlay.id = "lightbox";
-  overlay.innerHTML = `
-    <div id="lightbox-backdrop"></div>
-    <div id="lightbox-content">
-      <button id="lightbox-close">✕</button>
-      <div id="lightbox-spinner"></div>
-      <img id="lightbox-img" alt="">
-    </div>`;
-  document.body.appendChild(overlay);
+  const overlay = document.getElementById("lightbox");
 
   function close() { overlay.classList.remove("open"); }
   overlay.querySelector("#lightbox-backdrop").addEventListener("click", close);
@@ -350,4 +343,4 @@ function esc(s) {
 // ── Boot ──────────────────────────────────────────────────────────────────────
 
 loadStats();
-showView("date");
+showView("home");
