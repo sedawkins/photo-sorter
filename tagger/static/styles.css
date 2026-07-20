@@ -279,6 +279,16 @@ main {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ── Location map ──────────────────────────────────────────────────────────── */
+
+#location-map {
+  height: 420px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  margin-bottom: 32px;
+  overflow: hidden;
+}
+
 /* ── Lightbox ──────────────────────────────────────────────────────────────── */
 
 #lightbox { display: none; }

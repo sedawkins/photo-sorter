@@ -123,14 +123,52 @@ function updateDateHeader() {
 
 // ── Location view ─────────────────────────────────────────────────────────────
 
+let _map = null;
+
 async function loadLocations() {
   locationStack = [];
   const el = document.getElementById("location-content");
+  const mapEl = document.getElementById("location-map");
+  mapEl.style.display = "block";
   el.innerHTML = `<div class="empty"><span class="spinner"></span>Loading locations…</div>`;
   updateLocationHeader();
   try {
     const locs = await api("/api/locations");
     if (!locs.length) { el.innerHTML = `<div class="empty">No geotagged photos found.</div>`; return; }
+
+    // ── Leaflet map ──────────────────────────────────────────────────────────
+    const mapped = locs.filter(l => l.lat && l.lon);
+    if (mapped.length) {
+      if (_map) { _map.remove(); _map = null; }
+      _map = L.map("location-map", { zoomControl: true });
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+        attribution: "© OpenStreetMap © CARTO",
+        maxZoom: 14,
+      }).addTo(_map);
+
+      const maxCount = Math.max(...mapped.map(l => l.count));
+      const markers = mapped.map(l => {
+        const r = 8 + 34 * Math.sqrt(l.count / maxCount);
+        const circle = L.circleMarker([l.lat, l.lon], {
+          radius: r,
+          fillColor: "#0070f3",
+          fillOpacity: 0.55,
+          color: "#0070f3",
+          weight: 1.5,
+        }).addTo(_map);
+        const sub = l.country === "US" ? l.state_or_region : l.country;
+        circle.bindTooltip(`<strong>${l.city}</strong><br>${sub}<br>${l.count.toLocaleString()} photos`);
+        circle.on("click", () => loadLocationYears(l.country, l.city));
+        return circle;
+      });
+
+      const group = L.featureGroup(markers);
+      _map.fitBounds(group.getBounds().pad(0.15));
+    } else {
+      mapEl.style.display = "none";
+    }
+
+    // ── List below map ───────────────────────────────────────────────────────
     el.innerHTML = `<div class="location-list">${locs.map(l => {
       const sub = l.country === "US" ? l.state_or_region : l.country;
       return `<div class="location-row" onclick="loadLocationYears('${esc(l.country)}','${esc(l.city)}')">
@@ -142,12 +180,14 @@ async function loadLocations() {
       </div>`;
     }).join("")}</div>`;
   } catch (e) {
+    mapEl.style.display = "none";
     el.innerHTML = `<div class="empty">Could not load locations. Is the VM running?</div>`;
   }
 }
 
 async function loadLocationYears(country, city) {
   locationStack = [country, city];
+  document.getElementById("location-map").style.display = "none";
   const el = document.getElementById("location-content");
   el.innerHTML = `<div class="empty"><span class="spinner"></span>Loading ${city}…</div>`;
   updateLocationHeader();
