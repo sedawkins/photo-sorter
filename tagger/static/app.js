@@ -370,8 +370,8 @@ function renderClumpDetail(c, i) {
     <div class="clump-detail">
       ${hint}
       <div class="clump-actions">
-        <button class="btn btn--danger" onclick="trashClump(event, ${i})">🗑️ Trash clump</button>
         <button class="btn btn--secondary" id="scan-btn-${i}" onclick="scanClump(event, ${i})">🔍 Scan for clues</button>
+        <button class="btn btn--danger" onclick="trashClump(event, ${i})">🗑️ Trash clump</button>
       </div>
       <div class="clump-tag-form">
         <input class="tag-input" id="tag-city-${i}" type="text" placeholder="City" autocomplete="off">
