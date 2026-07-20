@@ -138,6 +138,143 @@ def get_photos_by_location(conn: sqlite3.Connection, city: str, country: str,
     return [dict(r) for r in rows]
 
 
+# ── Phase 2: Clump queries ────────────────────────────────────────────────────
+
+_CLUMP_GAP_HOURS = 3
+
+def get_clumps(conn: sqlite3.Connection) -> list[dict]:
+    """
+    Detect untagged clumps: consecutive photos from the same camera with no
+    gap > 3 hours. Returns one row per clump with metadata + 5 sample paths.
+    """
+    rows = conn.execute("""
+        WITH ordered AS (
+            SELECT hash, new_path, taken_date, year, month,
+                   COALESCE(camera_make, '') AS cam_make,
+                   COALESCE(camera_model, '') AS cam_model
+            FROM photos
+            WHERE status = 'organized'
+              AND city IS NULL
+              AND tagged_city IS NULL
+              AND taken_date IS NOT NULL
+              AND (media_type = 'photo' OR media_type IS NULL)
+            ORDER BY cam_make, cam_model, taken_date
+        ),
+        gaps AS (
+            SELECT *,
+                CASE
+                    WHEN LAG(taken_date) OVER (
+                            PARTITION BY cam_make, cam_model
+                            ORDER BY taken_date) IS NULL THEN 1
+                    WHEN (julianday(taken_date) - julianday(
+                            LAG(taken_date) OVER (
+                                PARTITION BY cam_make, cam_model
+                                ORDER BY taken_date))) * 24 > :gap THEN 1
+                    ELSE 0
+                END AS is_new_clump
+            FROM ordered
+        ),
+        numbered AS (
+            SELECT *,
+                SUM(is_new_clump) OVER (
+                    PARTITION BY cam_make, cam_model
+                    ORDER BY taken_date
+                    ROWS UNBOUNDED PRECEDING) AS clump_num
+            FROM gaps
+        )
+        SELECT
+            cam_make, cam_model, clump_num,
+            MIN(taken_date) AS start_date,
+            MAX(taken_date) AS end_date,
+            COUNT(*) AS photo_count,
+            GROUP_CONCAT(new_path, '||') AS all_paths
+        FROM numbered
+        GROUP BY cam_make, cam_model, clump_num
+        ORDER BY start_date
+    """, {"gap": _CLUMP_GAP_HOURS}).fetchall()
+
+    result = []
+    for r in rows:
+        paths = [p for p in (r["all_paths"] or "").split("||") if p]
+        result.append({
+            **{k: r[k] for k in ("cam_make", "cam_model", "clump_num",
+                                  "start_date", "end_date", "photo_count")},
+            "sample_paths": paths[:5],
+        })
+    return result
+
+
+def get_clump_photos(conn: sqlite3.Connection,
+                     cam_make: str, cam_model: str,
+                     start_date: str, end_date: str) -> list[dict]:
+    """All photos belonging to a specific clump."""
+    rows = conn.execute("""
+        SELECT hash, new_path, taken_date, filename
+        FROM photos
+        WHERE status = 'organized'
+          AND city IS NULL AND tagged_city IS NULL
+          AND taken_date IS NOT NULL
+          AND COALESCE(camera_make, '') = ?
+          AND COALESCE(camera_model, '') = ?
+          AND taken_date >= ? AND taken_date <= ?
+        ORDER BY taken_date
+    """, (cam_make, cam_model, start_date, end_date)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def tag_clump(conn: sqlite3.Connection,
+              cam_make: str, cam_model: str,
+              start_date: str, end_date: str,
+              tagged_city: str, tagged_country: str):
+    """Write user-supplied location to all photos in a clump."""
+    conn.execute("""
+        UPDATE photos
+        SET tagged_city = ?, tagged_country = ?
+        WHERE status = 'organized'
+          AND city IS NULL AND tagged_city IS NULL
+          AND taken_date IS NOT NULL
+          AND COALESCE(camera_make, '') = ?
+          AND COALESCE(camera_model, '') = ?
+          AND taken_date >= ? AND taken_date <= ?
+    """, (tagged_city, tagged_country, cam_make, cam_model, start_date, end_date))
+    conn.commit()
+
+
+def trash_clump(conn: sqlite3.Connection,
+                cam_make: str, cam_model: str,
+                start_date: str, end_date: str):
+    """Mark all photos in a clump as trashed."""
+    conn.execute("""
+        UPDATE photos
+        SET status = 'trashed'
+        WHERE status = 'organized'
+          AND city IS NULL AND tagged_city IS NULL
+          AND taken_date IS NOT NULL
+          AND COALESCE(camera_make, '') = ?
+          AND COALESCE(camera_model, '') = ?
+          AND taken_date >= ? AND taken_date <= ?
+    """, (cam_make, cam_model, start_date, end_date))
+    conn.commit()
+
+
+def save_ai_hint(conn: sqlite3.Connection,
+                 cam_make: str, cam_model: str,
+                 start_date: str, end_date: str,
+                 hint: str, description: str):
+    """Cache AI scan results on all photos in the clump."""
+    conn.execute("""
+        UPDATE photos
+        SET ai_location_hint = ?, ai_description = ?
+        WHERE status = 'organized'
+          AND city IS NULL AND tagged_city IS NULL
+          AND taken_date IS NOT NULL
+          AND COALESCE(camera_make, '') = ?
+          AND COALESCE(camera_model, '') = ?
+          AND taken_date >= ? AND taken_date <= ?
+    """, (hint, description, cam_make, cam_model, start_date, end_date))
+    conn.commit()
+
+
 # ── Thumbnail path helper ─────────────────────────────────────────────────────
 
 def onedrive_path_for_photo(photo: dict, sorted_root: str) -> str:

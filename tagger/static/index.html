@@ -63,13 +63,13 @@
         </div>
         <span class="menu-arrow">›</span>
       </div>
-      <div class="menu-item menu-item--soon">
+      <div class="menu-item" onclick="showView('tag')">
         <span class="menu-icon">🏷️</span>
         <div class="menu-text">
           <div class="menu-title">Tag Locations</div>
-          <div class="menu-sub">Add locations to 11,222 untagged photos</div>
+          <div class="menu-sub">Add locations to untagged photos</div>
         </div>
-        <span class="menu-badge">Coming soon</span>
+        <span class="menu-arrow">›</span>
       </div>
       <div class="menu-item menu-item--later">
         <span class="menu-icon">📥</span>
@@ -97,6 +97,16 @@
     </div>
     <div id="date-content">
       <div class="empty">Loading…</div>
+    </div>
+  </div>
+
+  <!-- ── Tag view ─────────────────────────────────────────────────────────── -->
+  <div class="view" id="view-tag">
+    <div class="section-header" id="tag-header">
+      <span class="section-title">Tag Locations</span>
+    </div>
+    <div id="tag-content">
+      <div class="empty">Loading clumps…</div>
     </div>
   </div>
 

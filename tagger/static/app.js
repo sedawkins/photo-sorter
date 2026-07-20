@@ -18,9 +18,12 @@ const API_BASE = window.API_BASE || "";  // e.g. "https://photo-sorter-vm.westus
 
 // ── API helpers ───────────────────────────────────────────────────────────────
 
-async function api(path) {
-  const headers = API_KEY ? { "X-API-Key": API_KEY } : {};
-  const resp = await fetch(API_BASE + path, { headers });
+async function api(path, options = {}) {
+  const headers = {
+    ...(API_KEY ? { "X-API-Key": API_KEY } : {}),
+    ...(options.body ? { "Content-Type": "application/json" } : {}),
+  };
+  const resp = await fetch(API_BASE + path, { ...options, headers });
   if (!resp.ok) throw new Error(`API error ${resp.status} for ${path}`);
   return resp.json();
 }
@@ -51,6 +54,7 @@ function showView(view) {
 
   if (view === "date" && dateStack.length === 0) loadYears();
   if (view === "location" && locationStack.length === 0) loadLocations();
+  if (view === "tag") loadClumps();
 }
 
 // ── Stats hero ────────────────────────────────────────────────────────────────
@@ -310,6 +314,144 @@ function lazyLoadThumbs(container) {
     });
   }, { rootMargin: "200px" });
   tiles.forEach(t => obs.observe(t));
+}
+
+// ── Tag view ──────────────────────────────────────────────────────────────────
+
+let clumps = [];
+let selectedClump = null;
+
+async function loadClumps() {
+  const el = document.getElementById("tag-content");
+  el.innerHTML = `<div class="empty"><span class="spinner"></span>Loading clumps…</div>`;
+  try {
+    clumps = await api("/api/clumps");
+    renderClumpList();
+  } catch (e) {
+    el.innerHTML = `<div class="empty">Could not load clumps. Is the VM running?</div>`;
+  }
+}
+
+function renderClumpList() {
+  const el = document.getElementById("tag-content");
+  if (!clumps.length) {
+    el.innerHTML = `<div class="empty">All clumps tagged! 🎉</div>`;
+    return;
+  }
+  el.innerHTML = `
+    <div class="clump-progress">${clumps.length} clump${clumps.length !== 1 ? "s" : ""} remaining</div>
+    <div class="clump-list">
+      ${clumps.map((c, i) => `
+        <div class="clump-row ${selectedClump === i ? "clump-row--active" : ""}"
+             onclick="selectClump(${i})">
+          <div class="clump-meta">
+            <div class="clump-date">${fmtDate(c.start_date)}${c.start_date !== c.end_date ? " – " + fmtDate(c.end_date) : ""}</div>
+            <div class="clump-camera">${c.cam_make} ${c.cam_model} · ${c.photo_count} photos</div>
+          </div>
+          <div class="clump-thumbs">
+            ${c.sample_paths.map(p => `<div class="clump-thumb" data-path="${esc(p)}"><div class="loading">…</div></div>`).join("")}
+          </div>
+          ${selectedClump === i ? renderClumpDetail(c, i) : ""}
+        </div>`).join("")}
+    </div>`;
+
+  // lazy-load clump thumbnails
+  document.querySelectorAll(".clump-thumb[data-path]").forEach(tile => {
+    const img = document.createElement("img");
+    img.alt = "";
+    img.onload = () => { tile.innerHTML = ""; tile.appendChild(img); };
+    img.src = thumbUrl(tile.dataset.path);
+  });
+}
+
+function renderClumpDetail(c, i) {
+  const hint = c.ai_hint ? `<div class="clump-hint">🤖 ${esc(c.ai_hint)}</div>` : "";
+  return `
+    <div class="clump-detail">
+      ${hint}
+      <div class="clump-actions">
+        <button class="btn btn--danger" onclick="trashClump(event, ${i})">🗑️ Trash clump</button>
+        <button class="btn btn--secondary" id="scan-btn-${i}" onclick="scanClump(event, ${i})">🔍 Scan for clues</button>
+      </div>
+      <div class="clump-tag-form">
+        <input class="tag-input" id="tag-city-${i}" type="text" placeholder="City" autocomplete="off">
+        <input class="tag-input" id="tag-country-${i}" type="text" placeholder="Country" autocomplete="off">
+        <button class="btn btn--primary" onclick="tagClump(event, ${i})">✓ Tag clump</button>
+      </div>
+      <div id="scan-result-${i}"></div>
+    </div>`;
+}
+
+function selectClump(i) {
+  selectedClump = selectedClump === i ? null : i;
+  renderClumpList();
+}
+
+function fmtDate(iso) {
+  if (!iso) return "Unknown";
+  return iso.slice(0, 10);
+}
+
+async function trashClump(e, i) {
+  e.stopPropagation();
+  const c = clumps[i];
+  if (!confirm(`Trash ${c.photo_count} photos from ${fmtDate(c.start_date)}?`)) return;
+  try {
+    await api("/api/clumps/trash", {
+      method: "POST",
+      body: JSON.stringify({ cam_make: c.cam_make, cam_model: c.cam_model,
+                             start_date: c.start_date, end_date: c.end_date }),
+    });
+    clumps.splice(i, 1);
+    selectedClump = null;
+    renderClumpList();
+  } catch (err) {
+    alert("Trash failed: " + err.message);
+  }
+}
+
+async function scanClump(e, i) {
+  e.stopPropagation();
+  const c = clumps[i];
+  const btn = document.getElementById(`scan-btn-${i}`);
+  const result = document.getElementById(`scan-result-${i}`);
+  btn.disabled = true;
+  btn.textContent = "⏳ Scanning…";
+  try {
+    const data = await api("/api/clumps/scan", {
+      method: "POST",
+      body: JSON.stringify({ cam_make: c.cam_make, cam_model: c.cam_model,
+                             start_date: c.start_date, end_date: c.end_date }),
+    });
+    clumps[i].ai_hint = data.hint;
+    result.innerHTML = `<div class="clump-hint">🤖 ${esc(data.description)}</div>`;
+    btn.textContent = "✓ Scanned";
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = "🔍 Scan for clues";
+    result.innerHTML = `<div class="clump-hint" style="color:red">Scan failed: ${esc(err.message)}</div>`;
+  }
+}
+
+async function tagClump(e, i) {
+  e.stopPropagation();
+  const c = clumps[i];
+  const city = document.getElementById(`tag-city-${i}`).value.trim();
+  const country = document.getElementById(`tag-country-${i}`).value.trim();
+  if (!city || !country) { alert("Please enter both city and country."); return; }
+  try {
+    await api("/api/clumps/tag", {
+      method: "POST",
+      body: JSON.stringify({ cam_make: c.cam_make, cam_model: c.cam_model,
+                             start_date: c.start_date, end_date: c.end_date,
+                             tagged_city: city, tagged_country: country }),
+    });
+    clumps.splice(i, 1);
+    selectedClump = null;
+    renderClumpList();
+  } catch (err) {
+    alert("Tag failed: " + err.message);
+  }
 }
 
 // ── Lightbox ──────────────────────────────────────────────────────────────────

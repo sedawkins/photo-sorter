@@ -48,7 +48,14 @@ def _init_schema(conn: sqlite3.Connection):
         );
     """)
     # Migrate existing DBs that predate these columns
-    for col, col_type in [("media_type", "TEXT"), ("file_size", "INTEGER")]:
+    for col, col_type in [
+        ("media_type", "TEXT"),
+        ("file_size", "INTEGER"),
+        ("tagged_city", "TEXT"),
+        ("tagged_country", "TEXT"),
+        ("ai_description", "TEXT"),
+        ("ai_location_hint", "TEXT"),
+    ]:
         try:
             conn.execute(f"ALTER TABLE photos ADD COLUMN {col} {col_type}")
             conn.commit()

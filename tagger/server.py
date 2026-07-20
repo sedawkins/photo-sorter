@@ -17,10 +17,12 @@ from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
+from pydantic import BaseModel
 from tagger.data import (
     connect, get_stats, get_years, get_months, get_photos_by_month,
     get_locations, get_years_for_location, get_photos_by_location,
     onedrive_path_for_photo,
+    get_clumps, get_clump_photos, tag_clump, trash_clump, save_ai_hint,
 )
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -177,3 +179,113 @@ def photo(path: str):
 @app.get("/api/health")
 def health():
     return {"status": "ok", "db": str(DB_PATH), "db_exists": DB_PATH.exists()}
+
+
+# ── Phase 2: Clump endpoints ──────────────────────────────────────────────────
+
+class ClumpRef(BaseModel):
+    cam_make: str
+    cam_model: str
+    start_date: str
+    end_date: str
+
+class TagRequest(ClumpRef):
+    tagged_city: str
+    tagged_country: str
+
+
+@app.get("/api/clumps", dependencies=[Depends(require_api_key)])
+def clumps(conn=Depends(get_db)):
+    return get_clumps(conn)
+
+
+@app.get("/api/clumps/photos", dependencies=[Depends(require_api_key)])
+def clump_photos(cam_make: str, cam_model: str,
+                 start_date: str, end_date: str,
+                 conn=Depends(get_db)):
+    return get_clump_photos(conn, cam_make, cam_model, start_date, end_date)
+
+
+@app.post("/api/clumps/tag", dependencies=[Depends(require_api_key)])
+def clump_tag(body: TagRequest, conn=Depends(get_db)):
+    tag_clump(conn, body.cam_make, body.cam_model,
+              body.start_date, body.end_date,
+              body.tagged_city, body.tagged_country)
+    return {"ok": True}
+
+
+@app.post("/api/clumps/trash", dependencies=[Depends(require_api_key)])
+def clump_trash(body: ClumpRef, conn=Depends(get_db)):
+    trash_clump(conn, body.cam_make, body.cam_model,
+                body.start_date, body.end_date)
+    return {"ok": True}
+
+
+@app.post("/api/clumps/scan", dependencies=[Depends(require_api_key)])
+def clump_scan(body: ClumpRef, conn=Depends(get_db)):
+    """Fetch up to 5 sample thumbnails and ask Claude Haiku for location hints."""
+    import base64, anthropic
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY not set on VM")
+
+    photos = get_clump_photos(conn, body.cam_make, body.cam_model,
+                               body.start_date, body.end_date)
+    if not photos:
+        raise HTTPException(status_code=404, detail="No photos found for clump")
+
+    # Pick up to 5 evenly-spaced samples
+    step = max(1, len(photos) // 5)
+    samples = photos[::step][:5]
+
+    token = _graph_token()
+    image_blocks = []
+    for p in samples:
+        try:
+            encoded_path = _onedrive_path(p["new_path"])
+            url = f"https://graph.microsoft.com/v1.0/me/drive/root:{encoded_path}:/thumbnails/0/medium/content"
+            resp = requests.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=30)
+            if resp.ok:
+                b64 = base64.standard_b64encode(resp.content).decode()
+                image_blocks.append({
+                    "type": "image",
+                    "source": {"type": "base64", "media_type": "image/jpeg", "data": b64},
+                })
+        except Exception:
+            continue
+
+    if not image_blocks:
+        raise HTTPException(status_code=502, detail="Could not fetch thumbnails for scan")
+
+    prompt = (
+        "You are helping to organize a family photo archive. "
+        "Look at these photos (all from the same camera session) and answer:\n"
+        "1. What LOCATION clues do you see? (landmarks, street signs, business names, "
+        "architecture, license plates, scenery, indoor/outdoor)\n"
+        "2. What are the main SUBJECTS? (people, pets, activities, events)\n"
+        "3. Your best LOCATION GUESS: city and country if possible, or region.\n\n"
+        "Be concise. Format: Location guess: [city, country]. Clues: [brief]. Subjects: [brief]."
+    )
+
+    client = anthropic.Anthropic(api_key=api_key)
+    message = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=300,
+        messages=[{"role": "user", "content": image_blocks + [{"type": "text", "text": prompt}]}],
+    )
+    description = message.content[0].text
+
+    # Extract location hint (first line or "Location guess:" line)
+    hint = ""
+    for line in description.splitlines():
+        if "location guess" in line.lower() or line.strip().startswith("1."):
+            hint = line.strip()
+            break
+    if not hint:
+        hint = description.splitlines()[0] if description else ""
+
+    save_ai_hint(conn, body.cam_make, body.cam_model,
+                 body.start_date, body.end_date, hint, description)
+
+    return {"hint": hint, "description": description}
