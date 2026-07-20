@@ -11,10 +11,16 @@ export default async function handler(req, res) {
 
   const headers = {};
   if (req.headers["x-api-key"]) headers["X-Api-Key"] = req.headers["x-api-key"];
+  if (req.headers["content-type"]) headers["content-type"] = req.headers["content-type"];
+
+  const fetchOpts = { method: req.method, headers, signal: AbortSignal.timeout(55000) };
+  if (req.method !== "GET" && req.method !== "HEAD" && req.body) {
+    fetchOpts.body = JSON.stringify(req.body);
+  }
 
   let vmResp;
   try {
-    vmResp = await fetch(target, { headers, signal: AbortSignal.timeout(55000) });
+    vmResp = await fetch(target, fetchOpts);
   } catch (err) {
     res.status(502).json({ error: "VM unreachable", detail: err.message });
     return;
