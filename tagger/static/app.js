@@ -371,6 +371,7 @@ function renderClumpDetail(c, i) {
       ${hint}
       <div class="clump-actions">
         <button class="btn btn--secondary" id="scan-btn-${i}" onclick="scanClump(event, ${i})">🔍 Scan for clues</button>
+        <button class="btn btn--secondary" id="photos-btn-${i}" onclick="loadClumpPhotos(event, ${i})">📷 View all ${c.photo_count} photos</button>
         <button class="btn btn--danger" onclick="trashClump(event, ${i})">🗑️ Trash clump</button>
       </div>
       <div class="clump-tag-form">
@@ -379,6 +380,7 @@ function renderClumpDetail(c, i) {
         <button class="btn btn--primary" onclick="tagClump(event, ${i})">✓ Tag clump</button>
       </div>
       <div id="scan-result-${i}"></div>
+      <div id="clump-photos-${i}"></div>
     </div>`;
 }
 
@@ -430,6 +432,40 @@ async function scanClump(e, i) {
     btn.disabled = false;
     btn.textContent = "🔍 Scan for clues";
     result.innerHTML = `<div class="clump-hint" style="color:red">Scan failed: ${esc(err.message)}</div>`;
+  }
+}
+
+async function loadClumpPhotos(e, i) {
+  e.stopPropagation();
+  const c = clumps[i];
+  const btn = document.getElementById(`photos-btn-${i}`);
+  const container = document.getElementById(`clump-photos-${i}`);
+
+  if (container.dataset.loaded) {
+    const hidden = container.style.display === "none";
+    container.style.display = hidden ? "" : "none";
+    btn.textContent = hidden ? "📷 Hide photos" : `📷 View all ${c.photo_count} photos`;
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = "⏳ Loading…";
+  try {
+    const photos = await api(
+      `/api/clumps/photos?cam_make=${encodeURIComponent(c.cam_make)}&cam_model=${encodeURIComponent(c.cam_model)}&start_date=${encodeURIComponent(c.start_date)}&end_date=${encodeURIComponent(c.end_date)}`
+    );
+    container.innerHTML = `<div class="photo-grid" style="margin-top:12px">${photos.map(p => `
+      <div class="photo-tile" data-path="${escAttr(p.new_path)}" onclick="event.stopPropagation();openLightbox('${esc(p.new_path)}')">
+        <div class="loading">…</div>
+      </div>`).join("")}</div>`;
+    container.dataset.loaded = "1";
+    lazyLoadThumbs(container);
+    btn.disabled = false;
+    btn.textContent = "📷 Hide photos";
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = `📷 View all ${c.photo_count} photos`;
+    container.innerHTML = `<div style="color:red;font-size:13px">Could not load photos: ${esc(err.message)}</div>`;
   }
 }
 

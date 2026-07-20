@@ -196,10 +196,11 @@ def get_clumps(conn: sqlite3.Connection) -> list[dict]:
     result = []
     for r in rows:
         paths = [p for p in (r["all_paths"] or "").split("||") if p]
+        step = max(1, len(paths) // 5)
         result.append({
             **{k: r[k] for k in ("cam_make", "cam_model", "clump_num",
                                   "start_date", "end_date", "photo_count")},
-            "sample_paths": paths[:5],
+            "sample_paths": paths[::step][:5],
         })
     return result
 
