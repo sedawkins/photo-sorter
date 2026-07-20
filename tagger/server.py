@@ -239,21 +239,40 @@ def clump_scan(body: ClumpRef, conn=Depends(get_db)):
     step = max(1, len(photos) // 5)
     samples = photos[::step][:5]
 
-    token = _graph_token()
+    import hashlib
     image_blocks = []
+    uncached = []
     for p in samples:
-        try:
-            encoded_path = _onedrive_path(p["new_path"])
-            url = f"https://graph.microsoft.com/v1.0/me/drive/root:{encoded_path}:/thumbnails/0/medium/content"
-            resp = requests.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=30)
-            if resp.ok:
-                b64 = base64.standard_b64encode(resp.content).decode()
-                image_blocks.append({
-                    "type": "image",
-                    "source": {"type": "base64", "media_type": "image/jpeg", "data": b64},
-                })
-        except Exception:
-            continue
+        cache_key = hashlib.md5(p["new_path"].encode()).hexdigest()
+        cache_file = THUMB_CACHE_DIR / f"{cache_key}.jpg"
+        if cache_file.exists():
+            b64 = base64.standard_b64encode(cache_file.read_bytes()).decode()
+            image_blocks.append({
+                "type": "image",
+                "source": {"type": "base64", "media_type": "image/jpeg", "data": b64},
+            })
+        else:
+            uncached.append(p)
+
+    # Fetch any thumbnails not yet in the local cache
+    if uncached:
+        token = _graph_token()
+        for p in uncached:
+            try:
+                encoded_path = _onedrive_path(p["new_path"])
+                url = f"https://graph.microsoft.com/v1.0/me/drive/root:{encoded_path}:/thumbnails/0/medium/content"
+                resp = requests.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=15)
+                if resp.ok:
+                    cache_key = hashlib.md5(p["new_path"].encode()).hexdigest()
+                    cache_file = THUMB_CACHE_DIR / f"{cache_key}.jpg"
+                    cache_file.write_bytes(resp.content)
+                    b64 = base64.standard_b64encode(resp.content).decode()
+                    image_blocks.append({
+                        "type": "image",
+                        "source": {"type": "base64", "media_type": "image/jpeg", "data": b64},
+                    })
+            except Exception:
+                continue
 
     if not image_blocks:
         raise HTTPException(status_code=502, detail="Could not fetch thumbnails for scan")
