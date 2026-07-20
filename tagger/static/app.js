@@ -162,6 +162,7 @@ async function loadLocations() {
       L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
         attribution: "© OpenStreetMap © CARTO",
         maxZoom: 14,
+        noWrap: true,
       }).addTo(_map);
 
       const maxCount = Math.max(...mapped.map(l => l.count));
