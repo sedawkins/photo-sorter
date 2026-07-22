@@ -376,7 +376,7 @@ function renderClumpDetail(c, i) {
       </div>
       <div class="clump-tag-form">
         <input class="tag-input" id="tag-city-${i}" type="text" placeholder="City" autocomplete="off">
-        <input class="tag-input" id="tag-country-${i}" type="text" placeholder="Country" autocomplete="off">
+        <input class="tag-input" id="tag-country-${i}" type="text" placeholder="State or Country" autocomplete="off">
         <button class="btn btn--primary" onclick="tagClump(event, ${i})">✓ Tag clump</button>
       </div>
       <div id="scan-result-${i}"></div>
