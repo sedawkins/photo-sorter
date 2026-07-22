@@ -320,6 +320,7 @@ function lazyLoadThumbs(container) {
 
 let clumps = [];
 let selectedClump = null;
+let scanSelections = {}; // { clumpIndex: Set<path> }
 
 async function loadClumps() {
   const el = document.getElementById("tag-content");
@@ -349,7 +350,10 @@ function renderClumpList() {
             <div class="clump-camera">${c.cam_make} ${c.cam_model} · ${c.photo_count} photos</div>
           </div>
           <div class="clump-thumbs">
-            ${c.sample_paths.map(p => `<div class="clump-thumb" data-path="${escAttr(p)}" onclick="event.stopPropagation();openLightbox('${esc(p)}')"><div class="loading">…</div></div>`).join("")}
+            ${c.sample_paths.map(p => {
+              const sel = scanSelections[i] && scanSelections[i].has(p);
+              return `<div class="clump-thumb${sel ? " clump-thumb--selected" : ""}" data-path="${escAttr(p)}" title="Click to select for AI scan" onclick="toggleScanSelect(event,${i},'${esc(p)}')"><div class="loading">…</div></div>`;
+            }).join("")}
           </div>
           ${selectedClump === i ? renderClumpDetail(c, i) : ""}
         </div>`).join("")}
@@ -382,6 +386,14 @@ function renderClumpDetail(c, i) {
       <div id="scan-result-${i}"></div>
       <div id="clump-photos-${i}"></div>
     </div>`;
+}
+
+function toggleScanSelect(e, i, path) {
+  e.stopPropagation();
+  if (!scanSelections[i]) scanSelections[i] = new Set();
+  const sel = scanSelections[i];
+  sel.has(path) ? sel.delete(path) : sel.add(path);
+  e.currentTarget.classList.toggle("clump-thumb--selected", sel.has(path));
 }
 
 function selectClump(i) {
@@ -420,10 +432,14 @@ async function scanClump(e, i) {
   btn.disabled = true;
   btn.textContent = "⏳ Scanning…";
   try {
+    const selected = scanSelections[i] ? [...scanSelections[i]] : [];
     const data = await api("/api/clumps/scan", {
       method: "POST",
-      body: JSON.stringify({ cam_make: c.cam_make, cam_model: c.cam_model,
-                             start_date: c.start_date, end_date: c.end_date }),
+      body: JSON.stringify({
+        cam_make: c.cam_make, cam_model: c.cam_model,
+        start_date: c.start_date, end_date: c.end_date,
+        ...(selected.length ? { paths: selected } : {}),
+      }),
     });
     clumps[i].ai_hint = data.hint;
     result.innerHTML = `<div class="clump-hint">🤖 ${esc(data.description)}</div>`;

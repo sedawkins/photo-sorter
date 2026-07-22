@@ -193,6 +193,9 @@ class TagRequest(ClumpRef):
     tagged_city: str
     tagged_country: str
 
+class ClumpScanRequest(ClumpRef):
+    paths: list[str] | None = None
+
 
 @app.get("/api/clumps", dependencies=[Depends(require_api_key)])
 def clumps(conn=Depends(get_db)):
@@ -222,7 +225,7 @@ def clump_trash(body: ClumpRef, conn=Depends(get_db)):
 
 
 @app.post("/api/clumps/scan", dependencies=[Depends(require_api_key)])
-def clump_scan(body: ClumpRef, conn=Depends(get_db)):
+def clump_scan(body: ClumpScanRequest, conn=Depends(get_db)):
     """Fetch up to 5 sample thumbnails and ask Claude Haiku for location hints."""
     import base64, anthropic
 
@@ -230,14 +233,15 @@ def clump_scan(body: ClumpRef, conn=Depends(get_db)):
     if not api_key:
         raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY not set on VM")
 
-    photos = get_clump_photos(conn, body.cam_make, body.cam_model,
-                               body.start_date, body.end_date)
-    if not photos:
-        raise HTTPException(status_code=404, detail="No photos found for clump")
-
-    # Pick up to 5 evenly-spaced samples
-    step = max(1, len(photos) // 5)
-    samples = photos[::step][:5]
+    if body.paths:
+        samples = [{"new_path": p} for p in body.paths[:5]]
+    else:
+        photos = get_clump_photos(conn, body.cam_make, body.cam_model,
+                                   body.start_date, body.end_date)
+        if not photos:
+            raise HTTPException(status_code=404, detail="No photos found for clump")
+        step = max(1, len(photos) // 5)
+        samples = photos[::step][:5]
 
     import hashlib
     image_blocks = []
