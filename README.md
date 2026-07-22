@@ -27,12 +27,25 @@ Completed enhancements:
      Runs `uvicorn gui.server:app` and reads a snapshot of the metadata DB; photo
      previews are fetched as on-demand Graph thumbnails, never bulk-downloaded.
      Architected to deploy to Vercel later. Does not write to the DB — the
-     location-tagging utility (item 1 below) is still a separate, pending build.
+     location-tagging utility (item 14 below) is now complete.
+14.  Location tagging web app (Vercel) — DONE. See `tagger/` and GUI_SPEC.md.
+     Three-view SPA: Date browse, Location browse, and Tag view for batch-tagging
+     ~11,000 pre-GPS photos by date+camera clump. Backend FastAPI on Azure VM,
+     frontend deployed to Vercel with auto-deploy on git push. Includes:
+     - Two-pass clump clustering (tight 3h window + 24h fringe absorption into anchors ≥3)
+     - AI scan via Claude Haiku — analyzes up to 5 sample thumbnails, returns location hint
+     - Selective AI scan — hover/long-press overlay to choose specific photos for AI analysis
+     - iPhone long-press support (500ms hold shows Scan / Open overlay)
+     - Disk thumbnail cache (`_system/thumb_cache/`) to stay within Vercel's 10s timeout
+     - Full-size lightbox viewer
+     - Trash clump action (sets status='trashed', skipped by future organize runs)
+15.  retag.py — DONE. Utility that moves tagged-clump photos from date-only
+     `Year/Month/Other/` folders into their location folders in OneDrive, then
+     updates the DB. Server-side Graph API copy + delete. Dry-run by default;
+     `--execute` to move. Handles partial prior runs (checks destination before
+     giving up on a missing source file).
 
 Future enhancements (backlog):
-1.   Location tagging utility — A write-enabled GUI (Vercel app) to batch-tag the
-     ~11,000 pre-GPS photos in Year/Month/Other by date+camera group. User picks a
-     location, photos are re-organized into the geo hierarchy. See GUI_SPEC.md.
 2.   Connectors to pull picture folders from other places like Google Drive or DropBox.
 4.   Shadow shortcuts instead of full copies (+ orphan cleanup utility).
 6.   AI image tagging (Azure Computer Vision, queryable tags in DB — enables Tucker/dog search).

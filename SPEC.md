@@ -226,10 +226,14 @@ CREATE TABLE photos (
     camera_model       TEXT,
     folder_description TEXT,               -- auto-extracted from source folder name
     user_description   TEXT,               -- free text added manually
-    status             TEXT,               -- 'scanned', 'organized', 'soft_duplicate'
+    status             TEXT,               -- 'scanned', 'organized', 'soft_duplicate', 'trashed'
     processed_at       TEXT,               -- ISO 8601 timestamp
     media_type         TEXT,               -- 'photo' or 'movie'
-    file_size          INTEGER             -- bytes, used for soft duplicate detection
+    file_size          INTEGER,            -- bytes, used for soft duplicate detection
+    tagged_city        TEXT,               -- user-assigned city (tagger UI, pre-retag)
+    tagged_country     TEXT,               -- user-assigned country (tagger UI, pre-retag)
+    ai_location_hint   TEXT,               -- Claude Haiku location hint from thumbnail scan
+    ai_description     TEXT                -- Claude Haiku short description of sample photos
 );
 
 CREATE TABLE photo_occurrences (
@@ -359,12 +363,28 @@ inform Phase 2 design decisions.
 - Shortcuts are deleted automatically when source is deleted — no orphan problem
 - Write a one-time migration utility to convert existing Shadow copies to shortcuts
 
-#### 2d. Location tagging web app (Vercel) — see GUI_SPEC.md
-- Three-view SPA: browse by Date, browse by Location, tag unlocated clumps
-- Hosted on Vercel (free Hobby tier); backend FastAPI runs on Azure VM
-- DB stays on VM co-located with OneDrive — no sync to external service needed
-- Phased: Phase 1 = browse views (replaces Muse GUI); Phase 2 = tag view (write-enabled)
-- See `GUI_SPEC.md` for full design and architecture
+#### 2d. Location tagging web app (Vercel) ✅ DONE (2026-07-22)
+
+Three-view SPA deployed to Vercel; backend FastAPI (`tagger/server.py`) runs on the Azure VM.
+See `GUI_SPEC.md` for full design and architecture.
+
+**What was built:**
+- Date View: year → month → photo grid with location section headers and lightbox
+- Location View: ranked location list → year/month drill-in → photo grid
+- Tag View: clump list with two-pass clustering, clump detail with tagging form and AI scan
+- AI scan via Claude Haiku: sends up to 5 disk-cached thumbnails, returns location hint +
+  short description; cached on all photos in the clump (`ai_location_hint`, `ai_description`)
+- Selective AI scan: hover/long-press overlay on each thumbnail with "🤖 Scan" / "↗ Open"
+  buttons; user picks which specific photos to send to AI
+- iPhone long-press (500ms) to show the hover overlay on touch devices
+- Disk thumbnail cache at `_system/thumb_cache/{md5}.jpg` — avoids Vercel's 10s timeout
+  (fetching 5 thumbnails live from Graph API took ~15s)
+- Trash clump action: sets `status='trashed'` on all photos in clump
+
+**`retag.py` utility** — moves tagged-clump photos from `Year/Month/Other/` into their
+location folders in OneDrive via server-side Graph API copy + delete, then updates the DB.
+Dry-run by default; `--execute` to move. Handles partial prior runs by checking the
+destination before giving up on a missing source.
 
 #### 2e. AI image tagging
 - Run organized photos through Azure Computer Vision

@@ -141,28 +141,42 @@ Assign locations to photos that have a date but no GPS.
 
 ## Clump Detection Algorithm
 
+Two-pass algorithm implemented in `tagger/data.py`:
+
+**Pass 1 — tight clustering (SQLite window functions)**
+
 ```sql
--- Find all photos with date but no GPS, ordered by camera + time
-SELECT hash, taken_date, camera_make, camera_model, filename, new_path
-FROM photos
-WHERE status IN ('organized', 'tagged')
-  AND taken_date IS NOT NULL
-  AND city IS NULL
-  AND media_type = 'photo'
-ORDER BY camera_make, camera_model, taken_date
+-- Partition by camera; new clump when gap to previous photo > 3 hours
+WITH gaps AS (
+  SELECT *, CASE
+    WHEN LAG(taken_date) OVER (PARTITION BY cam_make, cam_model ORDER BY taken_date) IS NULL THEN 1
+    WHEN julianday gap > 3h THEN 1
+    ELSE 0
+  END AS is_new_clump FROM ordered
+),
+numbered AS (
+  SELECT *, SUM(is_new_clump) OVER (...) AS clump_num FROM gaps
+)
+SELECT cam_make, cam_model, clump_num,
+       MIN(taken_date), MAX(taken_date), COUNT(*), GROUP_CONCAT(new_path,'||')
+FROM numbered GROUP BY cam_make, cam_model, clump_num
 ```
 
-Post-query in Python:
-- Sort by `(camera_make, camera_model, taken_date)`
-- Walk the list: start a new clump when the gap to the next photo exceeds **3 hours**
-- Discard clumps with fewer than 3 photos (configurable)
-- Return clumps sorted by date descending
+**Pass 2 — fringe absorption (Python `_absorb_fringes`)**
+- Clumps with ≥ 3 photos are **anchors**; smaller clumps are **fringes**
+- Each fringe is merged into the nearest same-camera anchor within a 24-hour gap
+- Fringes with no qualifying anchor are discarded (single stray photos not shown)
+- Sample thumbnails for the merged clump are re-selected evenly (up to 5)
 
-**Design rationale for 3-hour window:**
-- Covers a morning at one location before traveling
-- Short enough to separate morning/afternoon stops on a travel day
-  (e.g., London morning → Eurostar → Paris afternoon = two separate clumps)
-- Long enough to cover a leisurely day at one location with gaps between shots
+**Parameters** (in `data.py`):
+- `_CLUMP_GAP_HOURS = 3` — maximum gap within a clump
+- `_ANCHOR_MIN_PHOTOS = 3` — minimum photos to be an anchor
+- `_FRINGE_WINDOW_HOURS = 24` — maximum gap to absorb a fringe into an anchor
+
+**Design rationale:**
+- 3-hour window keeps morning and afternoon stops on a travel day in separate clumps
+- 24-hour fringe absorption merges a few warm-up shots before an event with the main clump
+- Minimum anchor size of 3 keeps the list focused on meaningful events
 
 ---
 
@@ -195,27 +209,35 @@ The existing `gui/` folder (Muse GUI) is retired in favor of `tagger/`.
 
 ## Phased Delivery
 
-### Phase 1 — Browse (read-only)
+### Phase 1 — Browse (read-only) ✅ DONE
 - VM backend: FastAPI with API key auth, CORS for Vercel domain, Azure DNS setup
 - Date View: year list → month grid → photo grid with location sections
-- Location View: ranked list + map → drill-in grid
+- Location View: ranked list → drill-in grid (map pin view deferred)
 - Vercel deploy: static SPA calling VM API, API key as env var
+- Auto-deploy on every `git push` to master
 
-### Phase 2 — Tag (write-enabled)
+### Phase 2 — Tag (write-enabled) ✅ DONE (2026-07-22)
 - Tag View added to the same SPA
-- Clump detection endpoint on the backend
-- Location picker with type-ahead
-- Write endpoint: saves location fields + sets `status='tagged'`
-- `organize.py` updated to process `tagged` photos
+- Clump detection: two-pass algorithm (see updated section above)
+- Location fields: City + "State or Country" inputs (not type-ahead — kept simple)
+- Write endpoint: saves `tagged_city` / `tagged_country` on all photos in clump
+- `retag.py` utility moves tagged photos in OneDrive and promotes fields to `city`/`country`
+  (replaces the original `organize.py --tagged` approach)
+- AI scan: Claude Haiku analyzes up to 5 thumbnails, returns location hint + description
+  as clues to help the user identify the location; result is shown in the clump detail
+- Selective AI scan: hover overlay (desktop) / long-press (iPhone, 500ms) on each
+  thumbnail shows "🤖 Scan" and "↗ Open" buttons; user can pick specific photos to send
+- Disk thumbnail cache (`_system/thumb_cache/{md5}.jpg`) prevents Vercel timeout
+- Trash clump: sets `status='trashed'` on all photos in clump; they disappear from Tag View
+- "View all N photos" grid in clump detail for larger clumps
+- Full-size lightbox (fetches `large` Graph API thumbnail on click)
 
 ### Phase 3 — Enhancements (backlog)
 - Soft duplicate review: side-by-side pair viewer, confirm/reject
 - AI tag search: find Tucker, find beach photos, etc.
-- Mobile-responsive layout for phone use
-- **Photo curation / delete:** mark individual photos as "uninteresting" (blurry, accidental,
-  redundant) from the browse grid. Moves the file to a `/Photos/Trash/` folder in OneDrive
-  (never hard-deletes) and marks `status='trashed'` in DB so organize.py skips it.
-  OneDrive recycle bin provides a second safety net before permanent deletion.
+- Mixed clump detection: flag clumps where photos span wildly different locations
+  (e.g., Hawaii + Paris in the same clump due to camera clock issues)
+- Split clump: manually divide a clump at a break point into two separately taggable groups
 
 ---
 
