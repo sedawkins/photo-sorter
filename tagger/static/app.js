@@ -369,7 +369,12 @@ function renderClumpList() {
   document.querySelectorAll(".clump-thumb[data-path]").forEach(tile => {
     const img = document.createElement("img");
     img.alt = "";
-    img.onload = () => { tile.innerHTML = ""; tile.appendChild(img); };
+    img.onload = () => {
+      const overlay = tile.querySelector(".clump-thumb-overlay");
+      tile.innerHTML = "";
+      tile.appendChild(img);
+      if (overlay) tile.appendChild(overlay);
+    };
     img.src = thumbUrl(tile.dataset.path);
   });
 }
