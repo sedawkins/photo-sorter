@@ -426,7 +426,8 @@ main {
   gap: 4px;
 }
 
-.clump-thumb:hover .clump-thumb-overlay {
+.clump-thumb:hover .clump-thumb-overlay,
+.photo-tile:hover .clump-thumb-overlay {
   display: flex;
 }
 

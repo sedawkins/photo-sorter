@@ -308,8 +308,16 @@ function lazyLoadThumbs(container) {
       obs.unobserve(tile);
       const img = document.createElement("img");
       img.alt = "";
-      img.onload = () => { tile.innerHTML = ""; tile.appendChild(img); };
-      img.onerror = () => { tile.querySelector(".loading").textContent = "✗"; };
+      img.onload = () => {
+        const overlay = tile.querySelector(".clump-thumb-overlay");
+        tile.innerHTML = "";
+        tile.appendChild(img);
+        if (overlay) tile.appendChild(overlay);
+      };
+      img.onerror = () => {
+        const loading = tile.querySelector(".loading");
+        if (loading) loading.textContent = "✗";
+      };
       img.src = thumbUrl(path);
     });
   }, { rootMargin: "200px" });
@@ -484,6 +492,10 @@ async function loadClumpPhotos(e, i) {
     container.innerHTML = `<div class="photo-grid" style="margin-top:12px">${photos.map(p => `
       <div class="photo-tile" data-path="${escAttr(p.new_path)}" onclick="event.stopPropagation();openLightbox('${esc(p.new_path)}')">
         <div class="loading">…</div>
+        <div class="clump-thumb-overlay">
+          <button class="thumb-action" onclick="toggleScanSelect(event,${i},'${esc(p.new_path)}')">🤖 Scan</button>
+          <button class="thumb-action" onclick="event.stopPropagation();openLightbox('${esc(p.new_path)}')">↗ Open</button>
+        </div>
       </div>`).join("")}</div>`;
     container.dataset.loaded = "1";
     lazyLoadThumbs(container);
