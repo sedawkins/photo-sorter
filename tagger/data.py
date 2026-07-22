@@ -141,6 +141,44 @@ def get_photos_by_location(conn: sqlite3.Connection, city: str, country: str,
 # ── Phase 2: Clump queries ────────────────────────────────────────────────────
 
 _CLUMP_GAP_HOURS = 3
+_ANCHOR_MIN_PHOTOS = 3
+_FRINGE_WINDOW_HOURS = 24
+
+
+def _absorb_fringes(result: list[dict]) -> list[dict]:
+    """Pull small clumps (< _ANCHOR_MIN_PHOTOS) into a nearby larger clump if within _FRINGE_WINDOW_HOURS."""
+    from datetime import datetime
+
+    def dt(s):
+        return datetime.fromisoformat(s)
+
+    def gap_seconds(a, b):
+        return max(0, max(
+            (dt(a["start_date"]) - dt(b["end_date"])).total_seconds(),
+            (dt(b["start_date"]) - dt(a["end_date"])).total_seconds(),
+        ))
+
+    anchors = [c for c in result if c["photo_count"] >= _ANCHOR_MIN_PHOTOS]
+    fringes = [c for c in result if c["photo_count"] < _ANCHOR_MIN_PHOTOS]
+
+    for fringe in fringes:
+        best, best_gap = None, None
+        for anchor in anchors:
+            if anchor["cam_make"] != fringe["cam_make"] or anchor["cam_model"] != fringe["cam_model"]:
+                continue
+            g = gap_seconds(anchor, fringe)
+            if g <= _FRINGE_WINDOW_HOURS * 3600 and (best_gap is None or g < best_gap):
+                best, best_gap = anchor, g
+        if best:
+            best["photo_count"] += fringe["photo_count"]
+            best["start_date"] = min(best["start_date"], fringe["start_date"])
+            best["end_date"] = max(best["end_date"], fringe["end_date"])
+            combined = best["sample_paths"] + fringe["sample_paths"]
+            step = max(1, len(combined) // 5)
+            best["sample_paths"] = combined[::step][:5]
+
+    return anchors
+
 
 def get_clumps(conn: sqlite3.Connection) -> list[dict]:
     """
@@ -202,7 +240,7 @@ def get_clumps(conn: sqlite3.Connection) -> list[dict]:
                                   "start_date", "end_date", "photo_count")},
             "sample_paths": paths[::step][:5],
         })
-    return result
+    return _absorb_fringes(result)
 
 
 def get_clump_photos(conn: sqlite3.Connection,
