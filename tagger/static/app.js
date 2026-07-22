@@ -352,7 +352,13 @@ function renderClumpList() {
           <div class="clump-thumbs">
             ${c.sample_paths.map(p => {
               const sel = scanSelections[i] && scanSelections[i].has(p);
-              return `<div class="clump-thumb${sel ? " clump-thumb--selected" : ""}" data-path="${escAttr(p)}" title="Click to select for AI scan" onclick="toggleScanSelect(event,${i},'${esc(p)}')"><div class="loading">…</div></div>`;
+              return `<div class="clump-thumb${sel ? " clump-thumb--selected" : ""}" data-path="${escAttr(p)}" onclick="event.stopPropagation();openLightbox('${esc(p)}')">
+                <div class="loading">…</div>
+                <div class="clump-thumb-overlay">
+                  <button class="thumb-action" onclick="toggleScanSelect(event,${i},'${esc(p)}')">🤖 Scan</button>
+                  <button class="thumb-action" onclick="event.stopPropagation();openLightbox('${esc(p)}')">↗ Open</button>
+                </div>
+              </div>`;
             }).join("")}
           </div>
           ${selectedClump === i ? renderClumpDetail(c, i) : ""}
@@ -393,7 +399,7 @@ function toggleScanSelect(e, i, path) {
   if (!scanSelections[i]) scanSelections[i] = new Set();
   const sel = scanSelections[i];
   sel.has(path) ? sel.delete(path) : sel.add(path);
-  e.currentTarget.classList.toggle("clump-thumb--selected", sel.has(path));
+  e.currentTarget.closest(".clump-thumb").classList.toggle("clump-thumb--selected", sel.has(path));
 }
 
 function selectClump(i) {
