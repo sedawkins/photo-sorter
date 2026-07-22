@@ -412,7 +412,7 @@ function toggleScanSelect(e, i, path) {
   if (!scanSelections[i]) scanSelections[i] = new Set();
   const sel = scanSelections[i];
   sel.has(path) ? sel.delete(path) : sel.add(path);
-  e.currentTarget.closest(".clump-thumb").classList.toggle("clump-thumb--selected", sel.has(path));
+  e.currentTarget.closest(".clump-thumb, .photo-tile").classList.toggle("clump-thumb--selected", sel.has(path));
 }
 
 function selectClump(i) {
