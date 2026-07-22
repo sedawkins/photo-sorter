@@ -1,0 +1,154 @@
+"""
+retag.py — Move tagged-clump photos from date-only folders to location folders.
+
+For each photo where tagged_city is set but city is still NULL, this script:
+  1. Builds the new OneDrive path: Year/Month/tagged_country/tagged_city/filename
+  2. Copies the file server-side in OneDrive to the new location
+  3. Deletes the original file
+  4. Updates the DB: new_path, city, country, clears tagged_city/tagged_country
+
+Dry-run by default — pass --execute to actually move files.
+
+Run on the VM:
+    python3 retag.py             # dry run — shows what would move
+    python3 retag.py --execute   # do it
+"""
+
+import argparse
+import logging
+import re
+import sys
+from pathlib import Path
+
+from db import connect
+from graph import GraphClient
+from onedrive_sync import acquire_token, load_config, make_token_refresher
+
+APP_DIR = Path(__file__).parent
+SYSTEM_DIR = APP_DIR / "_system"
+DB_PATH = SYSTEM_DIR / "photo_sorter.db"
+SORTED_ROOT = "/Photos/Sorted"
+PRIMARY_ROOT = f"{SORTED_ROOT}/Primary"
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s  %(levelname)-7s  %(message)s",
+    datefmt="%H:%M:%S",
+)
+logger = logging.getLogger("retag")
+
+_INVALID_CHARS = re.compile(r'[\\/:*?"<>|]')
+
+def sanitize(name: str) -> str:
+    return _INVALID_CHARS.sub("_", name).strip()
+
+
+def build_new_path(photo: dict) -> str:
+    """Return the relative new_path (under Primary) for a tagged photo."""
+    year     = photo["year"]   or "Unknown"
+    month    = photo["month"]  or "Unknown"
+    location = sanitize(photo["tagged_country"] or "Unknown")
+    city     = sanitize(photo["tagged_city"]    or "Unknown")
+    filename = photo["filename"]
+    return f"{year}/{month}/{location}/{city}/{filename}"
+
+
+def retag_photos(dry_run: bool):
+    config = load_config()
+    token  = acquire_token(config)
+    client = GraphClient(token, token_refresher=make_token_refresher(config))
+    conn   = connect(DB_PATH)
+
+    rows = conn.execute("""
+        SELECT id, hash, filename, new_path, year, month,
+               tagged_city, tagged_country
+        FROM photos
+        WHERE tagged_city IS NOT NULL
+          AND city IS NULL
+          AND status = 'organized'
+        ORDER BY year, month, tagged_country, tagged_city
+    """).fetchall()
+
+    if not rows:
+        logger.info("No tagged photos waiting to move — all done!")
+        return
+
+    logger.info(f"{'DRY RUN — ' if dry_run else ''}Found {len(rows)} photos to relocate")
+
+    moved = skipped = errors = 0
+
+    for photo in rows:
+        photo = dict(photo)
+        old_rel  = photo["new_path"]
+        new_rel  = build_new_path(photo)
+
+        if old_rel == new_rel:
+            logger.info(f"  SKIP (already in place): {old_rel}")
+            skipped += 1
+            continue
+
+        old_full = f"{PRIMARY_ROOT}/{old_rel}"
+        new_full = f"{PRIMARY_ROOT}/{new_rel}"
+
+        logger.info(f"  {'WOULD MOVE' if dry_run else 'MOVING'}: {old_rel}")
+        logger.info(f"         → {new_rel}")
+
+        if dry_run:
+            moved += 1
+            continue
+
+        try:
+            # Resolve source item ID
+            item_id = client.get_item_id_for_path(old_full)
+            if not item_id:
+                logger.warning(f"  NOT FOUND in OneDrive: {old_full} — skipping")
+                skipped += 1
+                continue
+
+            # Ensure destination folder exists
+            path_parts = new_rel.split("/")[:-1]   # drop filename
+            dest_folder_id = client.ensure_folder_path(PRIMARY_ROOT, path_parts)
+
+            # Copy to new location
+            client.copy_item(item_id, dest_folder_id, photo["filename"])
+
+            # Delete old file
+            client._session.delete(
+                f"https://graph.microsoft.com/v1.0/me/drive/items/{item_id}",
+                timeout=30,
+            ).raise_for_status()
+
+            # Update DB
+            conn.execute("""
+                UPDATE photos
+                SET new_path        = ?,
+                    city            = ?,
+                    country         = ?,
+                    tagged_city     = NULL,
+                    tagged_country  = NULL
+                WHERE id = ?
+            """, (new_rel, photo["tagged_city"], photo["tagged_country"], photo["id"]))
+            conn.commit()
+
+            logger.info(f"  ✓ Done")
+            moved += 1
+
+        except Exception as exc:
+            logger.error(f"  ERROR: {exc}")
+            errors += 1
+
+    logger.info(
+        f"\n{'DRY RUN ' if dry_run else ''}Summary: "
+        f"{moved} {'would move' if dry_run else 'moved'}, "
+        f"{skipped} skipped, {errors} errors"
+    )
+    if dry_run and moved:
+        logger.info("Re-run with --execute to perform the moves.")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--execute", action="store_true",
+                        help="Actually move files (default is dry run)")
+    args = parser.parse_args()
+    retag_photos(dry_run=not args.execute)

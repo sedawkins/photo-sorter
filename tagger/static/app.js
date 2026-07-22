@@ -373,7 +373,8 @@ function renderClumpList() {
         </div>`).join("")}
     </div>`;
 
-  // lazy-load clump thumbnails
+  // touch long-press + lazy-load clump thumbnails
+  initTouchOverlays(el);
   document.querySelectorAll(".clump-thumb[data-path]").forEach(tile => {
     const img = document.createElement("img");
     img.alt = "";
@@ -506,6 +507,7 @@ async function loadClumpPhotos(e, i) {
         </div>
       </div>`).join("")}</div>`;
     container.dataset.loaded = "1";
+    initTouchOverlays(container);
     lazyLoadThumbs(container);
     btn.disabled = false;
     btn.textContent = "📷 Hide photos";
@@ -536,6 +538,43 @@ async function tagClump(e, i) {
     alert("Tag failed: " + err.message);
   }
 }
+
+// ── Touch long-press overlay (iPhone) ────────────────────────────────────────
+
+function initTouchOverlays(container) {
+  container.querySelectorAll(".clump-thumb[data-path], .photo-tile[data-path]").forEach(tile => {
+    let timer = null;
+    const path = tile.dataset.path;
+
+    tile.addEventListener("touchstart", () => {
+      timer = setTimeout(() => {
+        timer = null;
+        // Dismiss any other open overlays first
+        document.querySelectorAll(".thumb-overlay-active").forEach(el => el.classList.remove("thumb-overlay-active"));
+        tile.classList.add("thumb-overlay-active");
+      }, 500);
+    });
+
+    tile.addEventListener("touchmove", () => { clearTimeout(timer); timer = null; });
+
+    tile.addEventListener("touchend", (e) => {
+      if (timer !== null) {
+        clearTimeout(timer); timer = null;
+        openLightbox(path);
+      }
+    });
+
+    tile.addEventListener("touchcancel", () => { clearTimeout(timer); timer = null; });
+    tile.addEventListener("contextmenu", (e) => e.preventDefault());
+  });
+}
+
+// Dismiss overlay when tapping elsewhere
+document.addEventListener("touchstart", (e) => {
+  if (!e.target.closest(".thumb-overlay-active")) {
+    document.querySelectorAll(".thumb-overlay-active").forEach(el => el.classList.remove("thumb-overlay-active"));
+  }
+}, { passive: true });
 
 // ── Lightbox ──────────────────────────────────────────────────────────────────
 

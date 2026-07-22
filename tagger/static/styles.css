@@ -427,7 +427,9 @@ main {
 }
 
 .clump-thumb:hover .clump-thumb-overlay,
-.photo-tile:hover .clump-thumb-overlay {
+.photo-tile:hover .clump-thumb-overlay,
+.clump-thumb.thumb-overlay-active .clump-thumb-overlay,
+.photo-tile.thumb-overlay-active .clump-thumb-overlay {
   display: flex;
 }
 
