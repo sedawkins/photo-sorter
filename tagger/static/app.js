@@ -363,7 +363,7 @@ function renderClumpList() {
               return `<div class="clump-thumb${sel ? " clump-thumb--selected" : ""}" data-path="${escAttr(p)}" onclick="event.stopPropagation();openLightbox('${esc(p)}')">
                 <div class="loading">…</div>
                 <div class="clump-thumb-overlay">
-                  <button class="thumb-action" onclick="toggleScanSelect(event,${i},'${esc(p)}')">🤖 Scan</button>
+                  <button class="thumb-action" onclick="toggleScanSelect(event,this,${i},'${esc(p)}')">🤖 Scan</button>
                   <button class="thumb-action" onclick="event.stopPropagation();openLightbox('${esc(p)}')">↗ Open</button>
                 </div>
               </div>`;
@@ -407,12 +407,12 @@ function renderClumpDetail(c, i) {
     </div>`;
 }
 
-function toggleScanSelect(e, i, path) {
+function toggleScanSelect(e, btn, i, path) {
   e.stopPropagation();
   if (!scanSelections[i]) scanSelections[i] = new Set();
   const sel = scanSelections[i];
   sel.has(path) ? sel.delete(path) : sel.add(path);
-  e.currentTarget.closest(".clump-thumb, .photo-tile").classList.toggle("clump-thumb--selected", sel.has(path));
+  btn.closest(".clump-thumb, .photo-tile").classList.toggle("clump-thumb--selected", sel.has(path));
 }
 
 function selectClump(i) {
@@ -493,7 +493,7 @@ async function loadClumpPhotos(e, i) {
       <div class="photo-tile" data-path="${escAttr(p.new_path)}" onclick="event.stopPropagation();openLightbox('${esc(p.new_path)}')">
         <div class="loading">…</div>
         <div class="clump-thumb-overlay">
-          <button class="thumb-action" onclick="toggleScanSelect(event,${i},'${esc(p.new_path)}')">🤖 Scan</button>
+          <button class="thumb-action" onclick="toggleScanSelect(event,this,${i},'${esc(p.new_path)}')">🤖 Scan</button>
           <button class="thumb-action" onclick="event.stopPropagation();openLightbox('${esc(p.new_path)}')">↗ Open</button>
         </div>
       </div>`).join("")}</div>`;
