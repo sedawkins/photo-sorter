@@ -412,7 +412,15 @@ function toggleScanSelect(e, btn, i, path) {
   if (!scanSelections[i]) scanSelections[i] = new Set();
   const sel = scanSelections[i];
   sel.has(path) ? sel.delete(path) : sel.add(path);
-  btn.closest(".clump-thumb, .photo-tile").classList.toggle("clump-thumb--selected", sel.has(path));
+  const selected = sel.has(path);
+  const tile = btn.closest("[data-path]");
+  if (tile) tile.classList.toggle("clump-thumb--selected", selected);
+  // Update all Scan buttons for this path to reflect selection state
+  document.querySelectorAll(`[data-path="${CSS.escape(path)}"] .thumb-action`).forEach(b => {
+    if (b.textContent.includes("Scan") || b.textContent.includes("✓")) {
+      b.textContent = selected ? "✓ Selected" : "🤖 Scan";
+    }
+  });
 }
 
 function selectClump(i) {
