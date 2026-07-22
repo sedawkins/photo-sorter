@@ -101,8 +101,25 @@ def retag_photos(dry_run: bool):
             # Resolve source item ID
             item_id = client.get_item_id_for_path(old_full)
             if not item_id:
-                logger.warning(f"  NOT FOUND in OneDrive: {old_full} — skipping")
-                skipped += 1
+                # Source missing — check if file already landed at destination
+                # (copy succeeded in a prior run but delete/DB-update failed)
+                dest_id = client.get_item_id_for_path(f"{PRIMARY_ROOT}/{new_rel}")
+                if dest_id:
+                    logger.info(f"  ALREADY AT DEST — updating DB only: {new_rel}")
+                    conn.execute("""
+                        UPDATE photos
+                        SET new_path        = ?,
+                            city            = ?,
+                            country         = ?,
+                            tagged_city     = NULL,
+                            tagged_country  = NULL
+                        WHERE id = ?
+                    """, (new_rel, photo["tagged_city"], photo["tagged_country"], photo["id"]))
+                    conn.commit()
+                    moved += 1
+                else:
+                    logger.warning(f"  NOT FOUND at source or dest — skipping: {old_full}")
+                    skipped += 1
                 continue
 
             # Ensure destination folder exists
