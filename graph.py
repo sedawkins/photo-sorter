@@ -92,13 +92,20 @@ class GraphClient:
         Recursively list all image and movie files under folder_path.
         Returns a flat list of Graph API driveItem dicts, each tagged with
         a '_media_type' key ('photo' or 'movie').
+
+        Live Photo companion MOVs are skipped: iPhone Live Photos save as a
+        paired JPEG + short MOV with identical base filenames. Any MOV whose
+        base name matches a still image in the same folder is dropped — it is
+        motion data for the still, not a standalone video.
         """
         url = (
             f"{BASE}/me/drive/root:{folder_path}:/children"
             "?$select=id,name,file,folder,photo,location,size,parentReference"
             "&$top=200"
         )
-        items = []
+        folder_files = []  # all files in this folder level
+        sub_paths = []     # subfolders to recurse into
+
         while url:
             data = self._get(url)
             for item in data.get("value", []):
@@ -109,17 +116,37 @@ class GraphClient:
                         item["parentReference"]["path"].replace("/drive/root:", "")
                         + "/" + item["name"]
                     )
-                    items.extend(self.list_photos(sub_path))
+                    sub_paths.append(sub_path)
                 elif "file" in item:
-                    ext = "." + item["name"].rsplit(".", 1)[-1].lower() if "." in item["name"] else ""
-                    if ext in IMAGE_EXTENSIONS:
-                        item["_media_type"] = "photo"
-                        items.append(item)
-                    elif ext in MOVIE_EXTENSIONS:
-                        item["_media_type"] = "movie"
-                        items.append(item)
-                    # Silently skip all other file types
+                    folder_files.append(item)
             url = data.get("@odata.nextLink")
+
+        # Build the set of still-photo base names present in this folder.
+        # Used to detect Live Photo companion MOVs (same base name, .mov extension).
+        still_bases = {
+            item["name"].rsplit(".", 1)[0].lower()
+            for item in folder_files
+            if "." in item["name"]
+            and "." + item["name"].rsplit(".", 1)[-1].lower() in IMAGE_EXTENSIONS
+        }
+
+        items = []
+        for item in folder_files:
+            ext = "." + item["name"].rsplit(".", 1)[-1].lower() if "." in item["name"] else ""
+            if ext in IMAGE_EXTENSIONS:
+                item["_media_type"] = "photo"
+                items.append(item)
+            elif ext in MOVIE_EXTENSIONS:
+                base = item["name"].rsplit(".", 1)[0].lower()
+                if base in still_bases:
+                    continue  # Live Photo companion — skip
+                item["_media_type"] = "movie"
+                items.append(item)
+            # Silently skip all other file types
+
+        for sub_path in sub_paths:
+            items.extend(self.list_photos(sub_path))
+
         return items
 
     def get_item_id_for_path(self, onedrive_path: str) -> str | None:
