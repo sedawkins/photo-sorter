@@ -58,7 +58,7 @@ class GraphClient:
                 _log.warning(f"  429 Too Many Requests — backing off {wait}s")
                 time.sleep(wait)
                 continue
-            if resp.status_code in (500, 503) and attempt < max_attempts - 1:
+            if resp.status_code in (500, 503, 504) and attempt < max_attempts - 1:
                 _log.warning(
                     f"  {resp.status_code} transient error — retrying in {delay}s "
                     f"(attempt {attempt + 1}/{max_attempts})"
