@@ -57,6 +57,33 @@ def parse_date(photo_facet: dict) -> tuple[str | None, str | None, str | None]:
         return None, None, None
 
 
+# Google Photos folder names when downloading by date
+_FOLDER_DATE_PATTERNS = [
+    "%B %d, %Y",   # "August 3, 2011"
+    "%B %Y",        # "August 2011"
+    "%Y-%m-%d",     # "2011-08-03"
+    "%Y-%m",        # "2011-08"
+]
+
+def parse_date_from_folder(folder_name: str | None) -> tuple[str | None, str | None, str | None]:
+    """
+    Fallback: extract a date from a folder name like 'August 3, 2011'.
+    Google Photos strips EXIF when importing older camera photos but names
+    download folders with the date, so this recovers year/month for organize.py.
+    Returns (iso_date, year, month_number) or (None, None, None).
+    """
+    if not folder_name:
+        return None, None, None
+    for pattern in _FOLDER_DATE_PATTERNS:
+        try:
+            dt = datetime.strptime(folder_name.strip(), pattern)
+            iso = dt.strftime("%Y-%m-%dT00:00:00+00:00")
+            return iso, str(dt.year), f"{dt.month:02d}"
+        except ValueError:
+            continue
+    return None, None, None
+
+
 MONTH_NAMES = {
     "01": "January",  "02": "February", "03": "March",
     "04": "April",    "05": "May",       "06": "June",
@@ -91,12 +118,10 @@ def pick_location_path(city: str, region: str, country: str) -> list[str]:
     return [country, city]
 
 
-def metadata_coverage(photo_facet: dict, location_facet: dict | None) -> str:
+def metadata_coverage(taken_date: str | None, location_facet: dict | None) -> str:
     """Return 'full', 'date_only', or 'none'."""
-    has_date = bool(photo_facet.get("takenDateTime"))
-    has_gps = location_facet is not None and (
-        location_facet.get("latitude") is not None
-    )
+    has_date = bool(taken_date)
+    has_gps = location_facet is not None and location_facet.get("latitude") is not None
     if has_date and has_gps:
         return "full"
     if has_date:
@@ -141,7 +166,6 @@ def scan(source_folder: str, logger: logging.Logger):
             file_size = item.get("size")
 
             taken_date, year, month = parse_date(photo_facet)
-            month_name = MONTH_NAMES.get(month, month) if month else None
             hash_val = file_facet.get("hashes", {}).get("quickXorHash")
             image_unique_id = photo_facet.get("cameraMake")  # placeholder — see note
 
@@ -164,9 +188,20 @@ def scan(source_folder: str, logger: logging.Logger):
             # Use the immediate parent folder name as context (e.g. "Amsterdam 2014")
             folder_description = parent_ref.get("name") or parent_path.rstrip("/").rsplit("/", 1)[-1] or None
 
+            # Fallback: parse date from folder name when EXIF has none
+            # (Google Photos strips EXIF on import but names folders by date)
+            if not taken_date:
+                fd, fy, fm = parse_date_from_folder(folder_description)
+                if fd:
+                    taken_date, year, month = fd, fy, fm
+                    logger.debug(f"  {name}: date from folder '{folder_description}'")
+                    stats["folder_date"] = stats.get("folder_date", 0) + 1
+
+            month_name = MONTH_NAMES.get(month, month) if month else None
+
             # Re-evaluate location_facet after possible invalidation above
             effective_location = location_facet if lat is not None else None
-            coverage = metadata_coverage(photo_facet, effective_location)
+            coverage = metadata_coverage(taken_date, effective_location)
             stats[{
                 "full": "full_metadata",
                 "date_only": "date_only",
@@ -234,6 +269,8 @@ def scan(source_folder: str, logger: logging.Logger):
     logger.info(f"  Full metadata (date+GPS): {stats['full_metadata']:>6}")
     logger.info(f"  Date only (no GPS):       {stats['date_only']:>6}")
     logger.info(f"  No metadata:              {stats['no_metadata']:>6}")
+    if stats.get("folder_date"):
+        logger.info(f"  Date from folder name:    {stats['folder_date']:>6}")
     logger.info(f"  Duplicate hash groups:    {stats['duplicate_hashes']:>6}")
     logger.info(f"  Total duplicate files:    {total_dup_files:>6}")
     logger.info(f"  Errors:                   {stats['errors']:>6}")
