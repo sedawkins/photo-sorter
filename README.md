@@ -10,6 +10,30 @@ Initial Goals:
 8.	Organize the source code on github.
 9.	Run the app on an Azure VM, since most of my (disorganized) file folders are on OneDrive.	
 
+## Running on the VM
+
+Always `git pull` first to get the latest code, then:
+
+```bash
+# Scan a source folder into the DB (fast — metadata only, no file copies)
+python3 scan.py /Pictures/iPhone-Sed-2026 > _system/runs/scan.log 2>&1 &
+tail -f _system/runs/scan.log
+
+# Organize scanned photos into /Photos/Sorted (slow — server-side OneDrive copies)
+python3 organize.py > _system/runs/organize.log 2>&1 &
+tail -f _system/runs/organize.log
+
+# Move tagged clumps from Other/ into location folders (after tagging in the web app)
+python3 retag.py              # dry run — shows what would move
+python3 retag.py --execute > _system/runs/retag.log 2>&1 &
+tail -f _system/runs/retag.log
+```
+
+Use `jobs` to see background jobs, `kill %1` (or `pkill -f organize.py`) to stop one.
+The tagger web app runs as a systemd service — `sudo systemctl restart photo-sorter` to restart it.
+
+---
+
 Completed enhancements:
 3.   Parallel copy optimization — DONE. ThreadPoolExecutor(max_workers=3), per-thread
      GraphClient + SQLite connection via threading.local(). 429 rate-limit backoff included.
