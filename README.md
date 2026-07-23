@@ -10,6 +10,19 @@ Initial Goals:
 8.	Organize the source code on github.
 9.	Run the app on an Azure VM, since most of my (disorganized) file folders are on OneDrive.	
 
+## VM Environment Setup
+
+After cloning the repo on a fresh VM, add these to `~/.bashrc` (values are in your personal notes — never commit them):
+
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."   # for AI scan in the tagger (console.anthropic.com)
+```
+
+The Graph API token and `config.json` live in `_system/` (synced from OneDrive, not in git).
+Run `. ~/.bashrc` or start a new shell after editing.
+
+---
+
 ## Running on the VM
 
 Always `git pull` first to get the latest code, then:
