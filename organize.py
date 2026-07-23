@@ -187,6 +187,11 @@ def run_organize(sorted_root: str, dry_run: bool = False):
     token = acquire_token(config)
     conn = connect(DB_PATH)
 
+    # Config may store the Graph API prefix ("/me/drive/root:/Photos/Sorted") but
+    # ensure_folder_path splits on "/" and needs a clean OneDrive path ("/Photos/Sorted").
+    if sorted_root.startswith("/me/drive/root:"):
+        sorted_root = sorted_root[len("/me/drive/root:"):]
+
     primary_root = f"{sorted_root}/Primary"
     shadow_root = f"{sorted_root}/Shadow"
     unsorted_root = f"{sorted_root}/Unsorted"
