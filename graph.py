@@ -15,7 +15,8 @@ BASE = "https://graph.microsoft.com/v1.0"
 IMAGE_EXTENSIONS = {
     ".jpg", ".jpeg", ".png", ".heic", ".tiff", ".tif", ".bmp", ".webp",
 }
-MOVIE_EXTENSIONS = {".mov", ".mp4", ".avi", ".mkv", ".m4v", ".wmv"}
+MOVIE_EXTENSIONS = {".mov", ".mp4", ".avi", ".mkv", ".m4v", ".wmv", ".3gp"}
+SIDECAR_EXTENSIONS = {".json"}
 
 # Folders that are internal app caches, not photo content — never recurse
 # into these. "Data.noindex" is iPhoto's internal preview-render cache: every
@@ -143,6 +144,9 @@ class GraphClient:
                 if base in still_bases:
                     continue  # Live Photo companion — skip
                 item["_media_type"] = "movie"
+                items.append(item)
+            elif ext in SIDECAR_EXTENSIONS:
+                item["_media_type"] = "sidecar"
                 items.append(item)
             # Silently skip all other file types
 

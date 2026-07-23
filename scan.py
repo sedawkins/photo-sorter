@@ -7,7 +7,7 @@ Produces a summary report at the end. No files are copied or moved.
 import json
 import logging
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from pathlib import Path
 
 import reverse_geocoder as rg
@@ -92,6 +92,49 @@ MONTH_NAMES = {
 }
 
 
+def get_sidecar_id(photo_name: str, sidecar_map: dict[str, str]) -> str | None:
+    """
+    Find the Google Takeout sidecar JSON item ID for a given photo filename.
+    Google uses two naming patterns (inconsistently):
+      - {full_filename}.supplemental-metadata.json  e.g. photo.jpg.supplemental-metadata.json
+      - {stem}.supplemental-metadata.json           e.g. photo.supplemental-metadata.json
+    """
+    candidates = [
+        f"{photo_name}.supplemental-metadata.json",
+        f"{Path(photo_name).stem}.supplemental-metadata.json",
+    ]
+    for c in candidates:
+        if c.lower() in sidecar_map:
+            return sidecar_map[c.lower()]
+    return None
+
+
+def parse_sidecar(client, item_id: str) -> tuple[str | None, float | None, float | None]:
+    """
+    Download a Google Takeout sidecar JSON and extract (iso_date, lat, lon).
+    Returns (None, None, None) if the sidecar can't be parsed or has no useful data.
+    """
+    try:
+        raw = client.download_item(item_id)
+        data = json.loads(raw)
+        taken_ts = data.get("photoTakenTime", {}).get("timestamp")
+        if taken_ts:
+            dt = datetime.fromtimestamp(int(taken_ts), tz=UTC)
+            iso = dt.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+        else:
+            iso = None
+        geo = data.get("geoData", {})
+        lat = geo.get("latitude")
+        lon = geo.get("longitude")
+        # 0.0/0.0 means no GPS in Google's format — resolve_location already
+        # filters near-zero coords, but set to None here for clarity
+        if lat == 0.0 and lon == 0.0:
+            lat = lon = None
+        return iso, lat, lon
+    except Exception:
+        return None, None, None
+
+
 def resolve_location(lat: float, lon: float) -> tuple[str, str, str] | None:
     """
     Return (city, state_or_region, country) from GPS coordinates, or None if
@@ -141,10 +184,16 @@ def scan(source_folder: str, logger: logging.Logger):
     items = client.list_photos(source_folder)
     photos = [i for i in items if i.get("_media_type") == "photo"]
     movies = [i for i in items if i.get("_media_type") == "movie"]
-    logger.info(f"Found {len(photos)} photo(s) and {len(movies)} movie(s)")
+    sidecars = [i for i in items if i.get("_media_type") == "sidecar"]
+
+    # Build lookup: lowercase sidecar filename → item ID
+    sidecar_map = {s["name"].lower(): s["id"] for s in sidecars}
+
+    media_items = [i for i in items if i.get("_media_type") in ("photo", "movie")]
+    logger.info(f"Found {len(photos)} photo(s), {len(movies)} movie(s), {len(sidecars)} sidecar(s)")
 
     stats = {
-        "total": len(items),
+        "total": len(media_items),
         "movies": len(movies),
         "full_metadata": 0,
         "date_only": 0,
@@ -153,7 +202,7 @@ def scan(source_folder: str, logger: logging.Logger):
         "errors": 0,
     }
 
-    for i, item in enumerate(items, 1):
+    for i, item in enumerate(media_items, 1):
         name = item.get("name", "unknown")
         item_id = item.get("id")
 
@@ -188,7 +237,29 @@ def scan(source_folder: str, logger: logging.Logger):
             # Use the immediate parent folder name as context (e.g. "Amsterdam 2014")
             folder_description = parent_ref.get("name") or parent_path.rstrip("/").rsplit("/", 1)[-1] or None
 
-            # Fallback: parse date from folder name when EXIF has none
+            # Fallback 1: Google Takeout sidecar JSON (photoTakenTime + geoData)
+            if not taken_date or lat is None:
+                sidecar_id = get_sidecar_id(name, sidecar_map)
+                if sidecar_id:
+                    sc_date, sc_lat, sc_lon = parse_sidecar(client, sidecar_id)
+                    if sc_date and not taken_date:
+                        taken_date = sc_date
+                        try:
+                            dt = datetime.fromisoformat(sc_date)
+                            year, month = str(dt.year), f"{dt.month:02d}"
+                        except ValueError:
+                            pass
+                        logger.debug(f"  {name}: date from sidecar")
+                        stats["sidecar_date"] = stats.get("sidecar_date", 0) + 1
+                    if sc_lat is not None and lat is None:
+                        lat, lon = sc_lat, sc_lon
+                        loc = resolve_location(lat, lon)
+                        if loc:
+                            city, state_or_region, country = loc
+                        else:
+                            lat = lon = None
+
+            # Fallback 2: parse date from folder name when EXIF and sidecar have none
             # (Google Photos strips EXIF on import but names folders by date)
             if not taken_date:
                 fd, fy, fm = parse_date_from_folder(folder_description)
@@ -269,6 +340,8 @@ def scan(source_folder: str, logger: logging.Logger):
     logger.info(f"  Full metadata (date+GPS): {stats['full_metadata']:>6}")
     logger.info(f"  Date only (no GPS):       {stats['date_only']:>6}")
     logger.info(f"  No metadata:              {stats['no_metadata']:>6}")
+    if stats.get("sidecar_date"):
+        logger.info(f"  Date from sidecar JSON:   {stats['sidecar_date']:>6}")
     if stats.get("folder_date"):
         logger.info(f"  Date from folder name:    {stats['folder_date']:>6}")
     logger.info(f"  Duplicate hash groups:    {stats['duplicate_hashes']:>6}")
