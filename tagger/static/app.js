@@ -471,7 +471,8 @@ async function scanClump(e, i) {
     });
     clumps[i].ai_hint = data.hint;
     result.innerHTML = `<div class="clump-hint">🤖 ${esc(data.description)}</div>`;
-    btn.textContent = "✓ Scanned";
+    btn.disabled = false;
+    btn.textContent = "🔍 Scan again";
   } catch (err) {
     btn.disabled = false;
     btn.textContent = "🔍 Scan for clues";
