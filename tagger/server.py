@@ -209,7 +209,7 @@ def thumbnail(path: str, request: Request, conn=Depends(get_db)):
 
     token = _graph_token()
     encoded = _onedrive_path(path)
-    url = f"https://graph.microsoft.com/v1.0/me/drive/root:{encoded}:/thumbnails/0/medium/content"
+    url = f"https://graph.microsoft.com/v1.0/me/drive/root:{encoded}:/thumbnails/0/large/content"
     resp = requests.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=30)
     if resp.status_code == 404:
         raise HTTPException(status_code=404, detail="Photo not found in OneDrive")
@@ -323,7 +323,7 @@ def clump_scan(body: ClumpScanRequest, conn=Depends(get_db)):
         for p in uncached:
             try:
                 encoded_path = _onedrive_path(p["new_path"])
-                url = f"https://graph.microsoft.com/v1.0/me/drive/root:{encoded_path}:/thumbnails/0/medium/content"
+                url = f"https://graph.microsoft.com/v1.0/me/drive/root:{encoded_path}:/thumbnails/0/large/content"
                 resp = requests.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=15)
                 if resp.ok:
                     cache_key = hashlib.md5(p["new_path"].encode()).hexdigest()
