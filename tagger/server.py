@@ -9,6 +9,8 @@ Start with:
 import os
 import time
 import logging
+import uuid
+from contextvars import ContextVar
 from functools import lru_cache
 from pathlib import Path
 
@@ -39,6 +41,24 @@ VERCEL_ORIGIN = os.environ.get("VERCEL_ORIGIN", "https://photo-sorter-git-master
 
 logger = logging.getLogger("tagger")
 
+# ── Trace ID (per-request context) ───────────────────────────────────────────
+
+_trace_id: ContextVar[str] = ContextVar("trace_id", default="-")
+
+
+class _TraceFilter(logging.Filter):
+    def filter(self, record):
+        record.trace_id = _trace_id.get()
+        return True
+
+
+_handler = logging.StreamHandler()
+_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s [%(trace_id)s] %(message)s"))
+_handler.addFilter(_TraceFilter())
+logging.getLogger("tagger").addHandler(_handler)
+logging.getLogger("tagger").setLevel(logging.INFO)
+
+
 # ── App ───────────────────────────────────────────────────────────────────────
 
 app = FastAPI(title="Photo Sorter API")
@@ -49,6 +69,25 @@ app.add_middleware(
     allow_methods=["GET"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def trace_middleware(request: Request, call_next):
+    # Accept X-Request-ID from proxy (so Vercel and VM share the same ID),
+    # or mint a new one if the request arrives directly.
+    trace_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex[:12]
+    token = _trace_id.set(trace_id)
+    logger.info(f"{request.method} {request.url.path}")
+    try:
+        response = await call_next(request)
+        response.headers["X-Trace-ID"] = trace_id
+        logger.info(f"{request.method} {request.url.path} → {response.status_code}")
+        return response
+    except Exception as exc:
+        logger.exception(f"{request.method} {request.url.path} → unhandled exception")
+        raise
+    finally:
+        _trace_id.reset(token)
 
 
 # ── Auth middleware ───────────────────────────────────────────────────────────
