@@ -458,9 +458,11 @@ async function scanClump(e, i) {
   const btn = document.getElementById(`scan-btn-${i}`);
   const result = document.getElementById(`scan-result-${i}`);
   btn.disabled = true;
-  btn.textContent = "⏳ Scanning…";
+  const selected = scanSelections[i] ? [...scanSelections[i]] : [];
+  btn.textContent = selected.length
+    ? `⏳ Scanning ${selected.length} selected…`
+    : "⏳ Scanning…";
   try {
-    const selected = scanSelections[i] ? [...scanSelections[i]] : [];
     const data = await api("/api/clumps/scan", {
       method: "POST",
       body: JSON.stringify({
@@ -470,7 +472,8 @@ async function scanClump(e, i) {
       }),
     });
     clumps[i].ai_hint = data.hint;
-    result.innerHTML = `<div class="clump-hint">🤖 ${esc(data.description)}</div>`;
+    const scope = selected.length ? `${selected.length} selected photo${selected.length > 1 ? "s" : ""}` : `all ${c.photo_count} photos`;
+    result.innerHTML = `<div class="clump-hint">🤖 <em style="font-size:11px;opacity:0.7">(scanned ${scope})</em><br>${esc(data.description)}</div>`;
     btn.disabled = false;
     btn.textContent = "🔍 Scan again";
   } catch (err) {
