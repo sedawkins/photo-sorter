@@ -515,6 +515,7 @@ async function loadClumpPhotos(e, i) {
     lazyLoadThumbs(container);
     btn.disabled = false;
     btn.textContent = "📷 Hide photos";
+    container.scrollIntoView({ behavior: "smooth", block: "nearest" });
   } catch (err) {
     btn.disabled = false;
     btn.textContent = `📷 View all ${c.photo_count} photos`;
