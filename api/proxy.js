@@ -40,10 +40,26 @@ export default async function handler(req, res) {
   const vmTrace = vmResp.headers.get("x-trace-id") || traceId;
   console.log(`[${traceId}] ← ${vmResp.status} (vm trace: ${vmTrace})`);
 
+  // 304 Not Modified — no body, just forward cache headers
+  if (vmResp.status === 304) {
+    res.status(304);
+    res.setHeader("X-Trace-ID", vmTrace);
+    const etag = vmResp.headers.get("etag");
+    if (etag) res.setHeader("ETag", etag);
+    res.end();
+    return;
+  }
+
   const contentType = vmResp.headers.get("content-type") || "application/json";
   res.status(vmResp.status);
   res.setHeader("content-type", contentType);
   res.setHeader("X-Trace-ID", vmTrace);
+
+  // Forward cache headers so browser and Vercel edge both cache thumbnails
+  for (const h of ["cache-control", "etag", "last-modified"]) {
+    const v = vmResp.headers.get(h);
+    if (v) res.setHeader(h, v);
+  }
 
   if (contentType.startsWith("image/")) {
     const buf = Buffer.from(await vmResp.arrayBuffer());

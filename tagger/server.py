@@ -183,13 +183,29 @@ def _onedrive_path(path: str) -> str:
     return quote(path, safe="/")
 
 
+_THUMB_CACHE_HEADERS = {
+    # Thumbnails are content-addressed (path → MD5 key) and never change.
+    # Cache aggressively in the browser (max-age) and at Vercel's edge (s-maxage).
+    "Cache-Control": "public, max-age=604800, s-maxage=604800, immutable",
+}
+
 @app.get("/api/thumb", dependencies=[Depends(require_api_key)])
-def thumbnail(path: str, conn=Depends(get_db)):
+def thumbnail(path: str, request: Request, conn=Depends(get_db)):
     import hashlib
     cache_key = hashlib.md5(path.encode()).hexdigest()
+    etag = f'"{cache_key}"'
+
+    # Conditional request — browser already has this thumbnail
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"ETag": etag})
+
     cache_file = THUMB_CACHE_DIR / f"{cache_key}.jpg"
     if cache_file.exists():
-        return Response(content=cache_file.read_bytes(), media_type="image/jpeg")
+        return Response(
+            content=cache_file.read_bytes(),
+            media_type="image/jpeg",
+            headers={**_THUMB_CACHE_HEADERS, "ETag": etag},
+        )
 
     token = _graph_token()
     encoded = _onedrive_path(path)
@@ -199,7 +215,11 @@ def thumbnail(path: str, conn=Depends(get_db)):
         raise HTTPException(status_code=404, detail="Photo not found in OneDrive")
     resp.raise_for_status()
     cache_file.write_bytes(resp.content)
-    return Response(content=resp.content, media_type="image/jpeg")
+    return Response(
+        content=resp.content,
+        media_type="image/jpeg",
+        headers={**_THUMB_CACHE_HEADERS, "ETag": etag},
+    )
 
 
 @app.get("/api/photo", dependencies=[Depends(require_api_key)])
