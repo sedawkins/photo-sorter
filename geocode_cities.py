@@ -18,62 +18,19 @@ import logging
 import time
 from pathlib import Path
 
-import requests
-
 from db import connect
+from geocode import geocode
 
 APP_DIR = Path(__file__).parent
 SYSTEM_DIR = APP_DIR / "_system"
 DB_PATH = SYSTEM_DIR / "photo_sorter.db"
-
-NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
-USER_AGENT = "photo-sorter-family-archive/1.0 (sedawkins@gmail.com)"
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s  %(levelname)-7s  %(message)s",
     datefmt="%H:%M:%S",
 )
-logger = logging.getLogger("geocode")
-
-
-def geocode(city: str, state_or_region: str | None, country: str) -> tuple[float, float] | None:
-    """Return (lat, lon) for a city, or None if not found."""
-    params = {"format": "json", "limit": 1, "addressdetails": 0}
-    if country == "US" and state_or_region:
-        params["city"]  = city
-        params["state"] = state_or_region
-        params["country"] = "United States"
-    else:
-        params["city"]    = city
-        params["country"] = country
-
-    try:
-        resp = requests.get(
-            NOMINATIM_URL, params=params,
-            headers={"User-Agent": USER_AGENT},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        results = resp.json()
-        if results:
-            return float(results[0]["lat"]), float(results[0]["lon"])
-        # Fallback: try without state for US cities (handles DC, territories, etc.)
-        if country == "US" and state_or_region and "state" in params:
-            del params["state"]
-            resp2 = requests.get(
-                NOMINATIM_URL, params=params,
-                headers={"User-Agent": USER_AGENT},
-                timeout=10,
-            )
-            resp2.raise_for_status()
-            results2 = resp2.json()
-            if results2:
-                return float(results2[0]["lat"]), float(results2[0]["lon"])
-        return None
-    except Exception as exc:
-        logger.warning(f"  Nominatim error for {city}: {exc}")
-        return None
+logger = logging.getLogger("geocode_cities")
 
 
 def run(dry_run: bool):

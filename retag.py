@@ -21,6 +21,7 @@ import sys
 from pathlib import Path
 
 from db import connect
+from geocode import geocode
 from graph import GraphClient
 from onedrive_sync import acquire_token, load_config, make_token_refresher
 from us_states import normalize_state
@@ -133,16 +134,22 @@ def retag_photos(dry_run: bool):
                 if dest_id:
                     logger.info(f"  ALREADY AT DEST — updating DB only: {new_rel}")
                     _, db_country, db_state = resolve_location(photo["tagged_country"] or "Unknown")
+                    coords = geocode(photo["tagged_city"], db_state, db_country)
                     conn.execute("""
                         UPDATE photos
                         SET new_path        = ?,
                             city            = ?,
                             state_or_region = ?,
                             country         = ?,
+                            latitude        = COALESCE(latitude, ?),
+                            longitude       = COALESCE(longitude, ?),
                             tagged_city     = NULL,
                             tagged_country  = NULL
                         WHERE id = ?
-                    """, (new_rel, photo["tagged_city"], db_state, db_country, photo["id"]))
+                    """, (new_rel, photo["tagged_city"], db_state, db_country,
+                          coords[0] if coords else None,
+                          coords[1] if coords else None,
+                          photo["id"]))
                     conn.commit()
                     moved += 1
                 else:
@@ -168,18 +175,26 @@ def retag_photos(dry_run: bool):
                 timeout=30,
             ).raise_for_status()
 
-            # Update DB
+            # Update DB — geocode city if no GPS coords already
             _, db_country, db_state = resolve_location(photo["tagged_country"] or "Unknown")
+            coords = geocode(photo["tagged_city"], db_state, db_country)
+            if coords:
+                logger.info(f"  geocoded → {coords[0]:.4f}, {coords[1]:.4f}")
             conn.execute("""
                 UPDATE photos
                 SET new_path        = ?,
                     city            = ?,
                     state_or_region = ?,
                     country         = ?,
+                    latitude        = COALESCE(latitude, ?),
+                    longitude       = COALESCE(longitude, ?),
                     tagged_city     = NULL,
                     tagged_country  = NULL
                 WHERE id = ?
-            """, (new_rel, photo["tagged_city"], db_state, db_country, photo["id"]))
+            """, (new_rel, photo["tagged_city"], db_state, db_country,
+                  coords[0] if coords else None,
+                  coords[1] if coords else None,
+                  photo["id"]))
             conn.commit()
 
             logger.info(f"  ✓ Done")
