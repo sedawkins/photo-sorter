@@ -9,11 +9,22 @@ USER_AGENT = "photo-sorter-family-archive/1.0 (sedawkins@gmail.com)"
 _cache: dict[tuple, tuple[float, float] | None] = {}
 
 
+# Some informal country/region names Nominatim doesn't recognize — map to official names.
+_COUNTRY_ALIASES = {
+    "england":  "United Kingdom",
+    "scotland": "United Kingdom",
+    "wales":    "United Kingdom",
+    "northern ireland": "United Kingdom",
+}
+
+
 def geocode(city: str, state_or_region: str | None, country: str) -> tuple[float, float] | None:
     """Return (lat, lon) city-center coordinates, or None if not found."""
     key = (city, state_or_region, country)
     if key in _cache:
         return _cache[key]
+
+    nom_country = _COUNTRY_ALIASES.get(country.lower(), country)
 
     params = {"format": "json", "limit": 1, "addressdetails": 0}
     if country == "US" and state_or_region:
@@ -22,7 +33,7 @@ def geocode(city: str, state_or_region: str | None, country: str) -> tuple[float
         params["country"] = "United States"
     else:
         params["city"]    = city
-        params["country"] = country
+        params["country"] = nom_country
 
     result = _query(params)
 
