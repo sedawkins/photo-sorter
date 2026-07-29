@@ -40,7 +40,8 @@ logger = logging.getLogger("retag")
 _INVALID_CHARS = re.compile(r'[\\/:*?"<>|]')
 
 def sanitize(name: str) -> str:
-    return _INVALID_CHARS.sub("_", name).strip()
+    name = _INVALID_CHARS.sub("_", name).strip()
+    return name.rstrip(".")  # OneDrive rejects folder names ending with a period
 
 
 def build_new_path(photo: dict) -> str:
