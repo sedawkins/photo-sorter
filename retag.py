@@ -29,6 +29,7 @@ SYSTEM_DIR = APP_DIR / "_system"
 DB_PATH = SYSTEM_DIR / "photo_sorter.db"
 SORTED_ROOT = "/Photos/Sorted"
 PRIMARY_ROOT = f"{SORTED_ROOT}/Primary"
+SHADOW_ROOT  = f"{SORTED_ROOT}/Shadow"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -52,6 +53,16 @@ def build_new_path(photo: dict) -> str:
     city     = sanitize(photo["tagged_city"]    or "Unknown")
     filename = photo["filename"]
     return f"{year}/{month}/{location}/{city}/{filename}"
+
+
+def build_shadow_parts(photo: dict) -> list[str]:
+    """Return folder path parts under Shadow: [location, city, year, month].
+    Mirrors organize.py's shadow layout so all photos end up in one tree."""
+    location = sanitize(photo["tagged_country"] or "Unknown")
+    city     = sanitize(photo["tagged_city"]    or "Unknown")
+    year     = photo["year"]  or "Unknown"
+    month    = photo["month"] or "Unknown"
+    return [location, city, year, month]
 
 
 def retag_photos(dry_run: bool):
@@ -95,6 +106,9 @@ def retag_photos(dry_run: bool):
         logger.info(f"         → {new_rel}")
 
         if dry_run:
+            shadow_parts = build_shadow_parts(photo)
+            shadow_rel = "/".join(shadow_parts) + "/" + photo["filename"]
+            logger.info(f"         shadow → {shadow_rel}")
             moved += 1
             continue
 
@@ -127,8 +141,13 @@ def retag_photos(dry_run: bool):
             path_parts = new_rel.split("/")[:-1]   # drop filename
             dest_folder_id = client.ensure_folder_path(PRIMARY_ROOT, path_parts)
 
-            # Copy to new location
+            # Copy to new Primary location
             client.copy_item(item_id, dest_folder_id, photo["filename"])
+
+            # Create Shadow copy  (Location/City/Year/Month — same layout as organize.py)
+            shadow_parts = build_shadow_parts(photo)
+            shadow_folder_id = client.ensure_folder_path(SHADOW_ROOT, shadow_parts)
+            client.copy_item(item_id, shadow_folder_id, photo["filename"])
 
             # Delete old file
             client._session.delete(
