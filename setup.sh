@@ -79,6 +79,15 @@ EOF
 sudo systemctl daemon-reload
 sudo systemctl enable photo-sorter
 
+# ── Cron jobs ────────────────────────────────────────────────────────────────
+echo
+echo "[4c] Installing cron jobs..."
+chmod +x "$APP_DIR/cron_retag.sh"
+# Add nightly retag at 2am (idempotent — skip if already present)
+CRON_LINE="0 2 * * * $APP_DIR/cron_retag.sh"
+( crontab -l 2>/dev/null | grep -qxF "$CRON_LINE" ) || \
+    ( crontab -l 2>/dev/null; echo "$CRON_LINE" ) | crontab -
+
 # ── Auth & OneDrive sync ──────────────────────────────────────────────────────
 echo
 echo "[5/5] Authenticating with Microsoft and syncing _system/ from OneDrive..."
