@@ -24,6 +24,15 @@ _ABBR: dict[str, str] = {
 
 _NAME_LOWER: dict[str, str] = {v.lower(): v for v in _ABBR.values()}
 
+# Common "Washington D.C." variants that users type as the country field
+_NAME_LOWER.update({
+    "washington d.c.": "District of Columbia",
+    "washington d.c":  "District of Columbia",
+    "washington dc":   "District of Columbia",
+    "washington, d.c.": "District of Columbia",
+    "washington, dc":  "District of Columbia",
+})
+
 
 def normalize_state(value: str) -> tuple[str | None, str]:
     """
