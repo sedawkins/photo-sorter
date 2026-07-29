@@ -167,7 +167,7 @@ def places(limit=None):
     rows = _all(
         "SELECT country, state_or_region, city, COUNT(*) n,"
         " AVG(latitude) lat, AVG(longitude) lon"
-        " FROM photos WHERE latitude IS NOT NULL AND city IS NOT NULL"
+        " FROM photos WHERE city IS NOT NULL"
         " GROUP BY country, state_or_region, city ORDER BY n DESC"
     )
     for r in rows:
