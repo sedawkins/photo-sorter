@@ -23,6 +23,7 @@ from pathlib import Path
 from db import connect
 from graph import GraphClient
 from onedrive_sync import acquire_token, load_config, make_token_refresher
+from us_states import normalize_state
 
 APP_DIR = Path(__file__).parent
 SYSTEM_DIR = APP_DIR / "_system"
@@ -45,12 +46,22 @@ def sanitize(name: str) -> str:
     return name.rstrip(".")  # OneDrive rejects folder names ending with a period
 
 
+def resolve_location(tagged_country: str) -> tuple[str, str, str | None]:
+    """
+    Return (folder_name, country_for_db, state_or_region_for_db) from user input.
+    US states (by name or abbreviation) are normalized to full name + country="US".
+    """
+    state_or_region, country = normalize_state(tagged_country or "Unknown")
+    folder = sanitize(state_or_region or country)
+    return folder, country, state_or_region
+
+
 def build_new_path(photo: dict) -> str:
     """Return the relative new_path (under Primary) for a tagged photo."""
     year     = photo["year"]   or "Unknown"
     month    = photo["month"]  or "Unknown"
-    location = sanitize(photo["tagged_country"] or "Unknown")
-    city     = sanitize(photo["tagged_city"]    or "Unknown")
+    location, _, _ = resolve_location(photo["tagged_country"] or "Unknown")
+    city     = sanitize(photo["tagged_city"] or "Unknown")
     filename = photo["filename"]
     return f"{year}/{month}/{location}/{city}/{filename}"
 
@@ -58,10 +69,10 @@ def build_new_path(photo: dict) -> str:
 def build_shadow_parts(photo: dict) -> list[str]:
     """Return folder path parts under Shadow: [location, city, year, month].
     Mirrors organize.py's shadow layout so all photos end up in one tree."""
-    location = sanitize(photo["tagged_country"] or "Unknown")
-    city     = sanitize(photo["tagged_city"]    or "Unknown")
-    year     = photo["year"]  or "Unknown"
-    month    = photo["month"] or "Unknown"
+    location, _, _ = resolve_location(photo["tagged_country"] or "Unknown")
+    city  = sanitize(photo["tagged_city"] or "Unknown")
+    year  = photo["year"]  or "Unknown"
+    month = photo["month"] or "Unknown"
     return [location, city, year, month]
 
 
@@ -121,15 +132,17 @@ def retag_photos(dry_run: bool):
                 dest_id = client.get_item_id_for_path(f"{PRIMARY_ROOT}/{new_rel}")
                 if dest_id:
                     logger.info(f"  ALREADY AT DEST — updating DB only: {new_rel}")
+                    _, db_country, db_state = resolve_location(photo["tagged_country"] or "Unknown")
                     conn.execute("""
                         UPDATE photos
                         SET new_path        = ?,
                             city            = ?,
+                            state_or_region = ?,
                             country         = ?,
                             tagged_city     = NULL,
                             tagged_country  = NULL
                         WHERE id = ?
-                    """, (new_rel, photo["tagged_city"], photo["tagged_country"], photo["id"]))
+                    """, (new_rel, photo["tagged_city"], db_state, db_country, photo["id"]))
                     conn.commit()
                     moved += 1
                 else:
@@ -156,15 +169,17 @@ def retag_photos(dry_run: bool):
             ).raise_for_status()
 
             # Update DB
+            _, db_country, db_state = resolve_location(photo["tagged_country"] or "Unknown")
             conn.execute("""
                 UPDATE photos
                 SET new_path        = ?,
                     city            = ?,
+                    state_or_region = ?,
                     country         = ?,
                     tagged_city     = NULL,
                     tagged_country  = NULL
                 WHERE id = ?
-            """, (new_rel, photo["tagged_city"], photo["tagged_country"], photo["id"]))
+            """, (new_rel, photo["tagged_city"], db_state, db_country, photo["id"]))
             conn.commit()
 
             logger.info(f"  ✓ Done")

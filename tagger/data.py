@@ -5,7 +5,11 @@ so the FastAPI layer stays thin.
 """
 
 import sqlite3
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from us_states import normalize_state
 
 
 def connect(db_path: Path) -> sqlite3.Connection:
@@ -266,6 +270,9 @@ def tag_clump(conn: sqlite3.Connection,
               start_date: str, end_date: str,
               tagged_city: str, tagged_country: str):
     """Write user-supplied location to all photos in a clump."""
+    state_or_region, country = normalize_state(tagged_country)
+    # Store canonical form: US state full name, or raw value for non-US
+    normalized_country = state_or_region if state_or_region else country
     conn.execute("""
         UPDATE photos
         SET tagged_city = ?, tagged_country = ?
@@ -275,7 +282,7 @@ def tag_clump(conn: sqlite3.Connection,
           AND COALESCE(camera_make, '') = ?
           AND COALESCE(camera_model, '') = ?
           AND taken_date >= ? AND taken_date <= ?
-    """, (tagged_city, tagged_country, cam_make, cam_model, start_date, end_date))
+    """, (tagged_city, normalized_country, cam_make, cam_model, start_date, end_date))
     conn.commit()
 
 
