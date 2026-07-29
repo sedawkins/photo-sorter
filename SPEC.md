@@ -34,7 +34,9 @@ GPS; others have only a date; scanned old prints have neither.
 | Metadata & dedup | Graph API `photo` and `file` facets (`quickXorHash`) |
 | Duplicate spot-check | Download ~12 random pairs, pixel-level compare (`Pillow`) |
 | HEIC conversion | `pillow-heif` plugin (winner files only, after dedup) |
-| Reverse geocoding | `reverse_geocoder` (offline, no API key needed) |
+| Reverse geocoding (GPS) | `reverse_geocoder` (offline, no API key needed) |
+| Forward geocoding (manual tags) | Nominatim / OpenStreetMap (free, 1 req/sec, `geocode.py`) |
+| US state normalization | `us_states.py` — maps "CA"/"california"/etc. → canonical name + country="US" |
 | Database | SQLite via Python `sqlite3` |
 | Logging | Log file per run, stored in OneDrive `_system/` |
 | Persistence | OneDrive `_system/` folder (DB, token cache, config, logs) |
@@ -122,8 +124,9 @@ Source folders are **never modified** — originals stay in place throughout.
         {Year}/
             {Month}/
 ```
-Shadow only contains photos that have GPS — no `Other` or `Unsorted` branches.
-Shadow entries are OneDrive shortcuts (not full copies) — see Phase 2.
+Shadow contains GPS-tagged photos (via organize.py) and manually-tagged photos
+(via retag.py). No `Other` or `Unsorted` branches.
+Shadow entries are full copies (shortcut migration is a future enhancement).
 
 ### Folder description files
 
@@ -259,6 +262,7 @@ CREATE UNIQUE INDEX idx_occurrence_path ON photo_occurrences(original_path);
 |---|---|---|
 | Date + GPS (US) | `Year/Month/State/City` | `State/City/Year/Month` |
 | Date + GPS (non-US) | `Year/Month/Country/City` | `Country/City/Year/Month` |
+| Date, manually tagged | `Year/Month/State/City` (via retag.py) | `State/City/Year/Month` (via retag.py) |
 | Date, no GPS | `Year/Month/Other` | *(not added to shadow)* |
 | No date, no GPS | `Unsorted/` | *(not added to shadow)* |
 

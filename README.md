@@ -80,7 +80,11 @@ Completed enhancements:
      `Year/Month/Other/` folders into their location folders in OneDrive, then
      updates the DB. Server-side Graph API copy + delete. Dry-run by default;
      `--execute` to move. Handles partial prior runs (checks destination before
-     giving up on a missing source file).
+     giving up on a missing source file). Now also:
+     - Creates a Shadow copy at move time (matching organize.py's layout)
+     - Geocodes city+country via Nominatim to store approx lat/lon for map dots
+     - Normalizes US state names ("CA" → "California", country="US") via us_states.py
+     - Runs nightly via cron (cron_retag.sh, installed by setup.sh at 2am)
 
 Future enhancements (backlog):
 2.   Connectors to pull picture folders from other places like Google Drive or DropBox.
