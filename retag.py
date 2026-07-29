@@ -101,7 +101,7 @@ def retag_photos(dry_run: bool):
 
     moved = skipped = errors = 0
 
-    for photo in rows:
+    for photo_num, photo in enumerate(rows, start=1):
         photo = dict(photo)
         old_rel  = photo["new_path"]
         new_rel  = build_new_path(photo)
@@ -114,7 +114,7 @@ def retag_photos(dry_run: bool):
         old_full = f"{PRIMARY_ROOT}/{old_rel}"
         new_full = f"{PRIMARY_ROOT}/{new_rel}"
 
-        logger.info(f"  {'WOULD MOVE' if dry_run else 'MOVING'}: {old_rel}")
+        logger.info(f"  {'WOULD MOVE' if dry_run else 'MOVING'} ({photo_num}/{len(rows)}): {old_rel}")
         logger.info(f"         → {new_rel}")
 
         if dry_run:
