@@ -107,7 +107,7 @@ def describe_photo(thumb_bytes: bytes, client: anthropic.Anthropic) -> str | Non
         return None
 
 
-def run(year: str | None, limit: int | None, refill: bool):
+def run(year: str | None, path: str | None, limit: int | None, refill: bool):
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
         logger.error("ANTHROPIC_API_KEY not set — add it to ~/.bashrc")
@@ -129,6 +129,9 @@ def run(year: str | None, limit: int | None, refill: bool):
     if year:
         where.append("year = ?")
         params.append(year)
+    if path:
+        where.append("new_path LIKE ?")
+        params.append(path.rstrip("/") + "/%")
 
     query = f"""
         SELECT id, new_path, filename, year, month, city, country
@@ -147,6 +150,7 @@ def run(year: str | None, limit: int | None, refill: bool):
 
     logger.info(f"Describing {len(rows)} photos" +
                 (f" from {year}" if year else "") +
+                (f" matching '{path}'" if path else "") +
                 (f" (limit {limit})" if limit else ""))
 
     done = skipped = errors = 0
@@ -181,8 +185,9 @@ def run(year: str | None, limit: int | None, refill: bool):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--year",   help="Only process photos from this year (e.g. 2013)")
+    parser.add_argument("--path",   help="Only process photos whose new_path starts with this prefix (e.g. '2013/November/California/Cambrian Park')")
     parser.add_argument("--limit",  type=int, help="Stop after N photos (for testing)")
     parser.add_argument("--refill", action="store_true",
                         help="Re-describe photos that already have ai_description")
     args = parser.parse_args()
-    run(year=args.year, limit=args.limit, refill=args.refill)
+    run(year=args.year, path=args.path, limit=args.limit, refill=args.refill)
