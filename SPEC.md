@@ -36,6 +36,7 @@ GPS; others have only a date; scanned old prints have neither.
 | HEIC conversion | `pillow-heif` plugin (winner files only, after dedup) |
 | Reverse geocoding (GPS) | `reverse_geocoder` (offline, no API key needed) |
 | Forward geocoding (manual tags) | Nominatim / OpenStreetMap (free, 1 req/sec, `geocode.py`) |
+| AI keyword tagging | Claude Haiku vision (`describe_photos.py`) — comma-separated tags stored in `ai_description` |
 | US state normalization | `us_states.py` — maps "CA"/"california"/etc. → canonical name + country="US" |
 | Database | SQLite via Python `sqlite3` |
 | Logging | Log file per run, stored in OneDrive `_system/` |
@@ -390,12 +391,18 @@ location folders in OneDrive via server-side Graph API copy + delete, then updat
 Dry-run by default; `--execute` to move. Handles partial prior runs by checking the
 destination before giving up on a missing source.
 
-#### 2e. AI image tagging
-- Run organized photos through Azure Computer Vision
-- Store tags in a new `photo_tags` DB table
-- Enables subject search: people, pets (Tucker the Labrador!), places, events
-- Scoped by geo+date to minimize cost (e.g. California photos, 2005–2017 for Tucker)
-- Query example: `WHERE country='US' AND state='California' AND year BETWEEN 2005 AND 2017 AND tag='labrador'`
+#### 2e. AI keyword tagging ✅ DONE (2026-07-30)
+
+`describe_photos.py` — batch AI tagging via Claude Haiku vision API.
+
+- Sends each photo's thumbnail to Haiku; stores comma-separated tags in the `ai_description` column
+- Tags cover: animal breeds (e.g. "yellow Labrador Retriever"), people descriptors ("elderly man",
+  "teenage boy"), setting ("beach", "ski slope", "restaurant"), activities ("birthday party",
+  "graduation", "skiing"), landmarks, and season/condition
+- Args: `--year`, `--path`, `--limit`, `--refill` (re-describe already-tagged photos)
+- Skips photos that already have `ai_description` — safe to re-run, resumes where it left off
+- Movies skipped (thumbnails unreliable for video)
+- ~1 sec/photo; 2013 test run: 1,283 described, 0 errors; full archive run started 2026-07-30
 
 #### 2f. Source cleanup utility ✅ DONE (2026-07-04)
 
@@ -458,6 +465,19 @@ folder named `Data.noindex` during the recursive listing
 4. Move-only, manifest-logged, dry-run-by-default, same-volume quarantine —
    nothing is ever deleted by this tool.
 
+#### 2g. Keyword search UI ✅ DONE (2026-07-30)
+
+Search view added to the Vercel SPA as a top-level menu item.
+
+- **Backend:** `search_photos(conn, query, limit, offset)` in `tagger/data.py` — `LIKE` query
+  against `ai_description`; returns `(photos, total)`. `GET /api/search?q=&limit=&offset=`
+  endpoint in `tagger/server.py`.
+- **Frontend:** text input with Enter-key support; results grouped by year; lazy-loaded
+  photo grid reusing `renderPhotoGroups`/`lazyLoadThumbs`; "Load more" pagination for
+  large result sets (first 50, then +50 per click).
+- Searching "retriever" returns all Tucker photos across years; "puppy" will surface
+  early Tucker once the full archive is described.
+
 ---
 
 ### Phase 3 — Additional Sources (PLANNED)
@@ -477,8 +497,12 @@ folder named `Data.noindex` during the recursive listing
 - **Collision counter:** ✅ DONE — shown in organize summary stats
 - **Shadow shortcuts:** replace full Shadow copies with OneDrive shortcuts (~30GB savings)
 - **Email summary:** send on run completion via SMTP
-- **AI image tagging:** Azure Computer Vision tags stored in `photo_tags` table;
-  enables Tucker/dog search scoped by geo+date
+- **AI keyword tagging:** ✅ DONE — Claude Haiku vision, tags in `ai_description` column
+- **Keyword search UI:** ✅ DONE — Search view in Vercel SPA, `/api/search` endpoint
+- **Face recognition:** distinguish specific people (e.g. wife vs. father-in-law);
+  keyword search ships first, face recognition is a future phase
+- **Auto-describe on import:** add `describe_photos.py` call to `scan.py` so new imports
+  are tagged automatically without a separate run
 - **iCloud integration:** Apple Privacy export → OneDrive folder → standard scan/organize
 - **Soft duplicate review UI:** Vercel — show near-duplicate pairs side by side for confirmation
 - **Purge utility:** find and remove orphaned Shadow shortcuts or stale DB entries

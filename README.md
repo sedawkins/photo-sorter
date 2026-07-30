@@ -40,6 +40,13 @@ tail -f _system/runs/organize.log
 python3 retag.py              # dry run — shows what would move
 python3 retag.py --execute > _system/runs/retag.log 2>&1 &
 tail -f _system/runs/retag.log
+
+# Generate AI keyword tags for photos (uses Claude Haiku via ANTHROPIC_API_KEY)
+python3 describe_photos.py                        # all undescribed photos
+python3 describe_photos.py --year 2013            # one year only
+python3 describe_photos.py --year 2013 --limit 20 # quick sample test
+python3 describe_photos.py > _system/runs/describe_all.log 2>&1 &
+tail -f _system/runs/describe_all.log
 ```
 
 Use `jobs` to see background jobs, `kill %1` (or `pkill -f organize.py`) to stop one.
@@ -85,12 +92,24 @@ Completed enhancements:
      - Geocodes city+country via Nominatim to store approx lat/lon for map dots
      - Normalizes US state names ("CA" → "California", country="US") via us_states.py
      - Runs nightly via cron (cron_retag.sh, installed by setup.sh at 2am)
+16.  describe_photos.py — AI keyword tagging via Claude Haiku vision. Sends each photo's
+     thumbnail to Haiku and stores comma-separated tags in the ai_description column.
+     Tags cover animal breeds, people descriptors, setting, activities, and landmarks.
+     Args: --year, --path, --limit, --refill. Skips already-described photos (safe to re-run).
+     ~1 sec/photo; 2013 full run: 1,283 described, 0 errors.
+17.  Keyword search UI — Search view added to the Vercel SPA. Text input → paginated
+     photo grid (grouped by year). Backend: GET /api/search?q=&limit=&offset= in
+     tagger/server.py, search_photos() in tagger/data.py (LIKE query on ai_description).
+     "Load more" pagination for large result sets (e.g. searching "retriever" returns
+     hundreds of Tucker photos).
 
 Future enhancements (backlog):
 2.   Connectors to pull picture folders from other places like Google Drive or DropBox.
 4.   Shadow shortcuts instead of full copies (+ orphan cleanup utility).
-6.   AI image tagging (Azure Computer Vision, queryable tags in DB — enables Tucker/dog search).
+6.   Face recognition — distinguish specific people (e.g. wife vs. father-in-law).
+     Keyword search (item 17) ships first; face recognition is a future phase.
 7.   Email summary on run completion.
 8.   iCloud integration (Apple Privacy export, one-time bulk import).
 9.   Soft duplicate review UI (Vercel) — show near-duplicate pairs side by side for review.
 10.  Phase 4 incremental import for new photos.
+18.  Add ai_description generation to scan.py so new imports are auto-described.
