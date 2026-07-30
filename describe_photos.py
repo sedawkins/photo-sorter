@@ -73,7 +73,11 @@ def fetch_thumbnail(new_path: str, graph_client: GraphClient) -> bytes | None:
         return cache_file.read_bytes()
 
     from urllib.parse import quote
-    full_path = f"{SORTED_ROOT}/Primary/{new_path}"
+    if new_path.startswith("Unsorted"):
+        rest = new_path.removeprefix("Unsorted/").removeprefix("Unsorted")
+        full_path = f"{SORTED_ROOT}/Unsorted/{rest}"
+    else:
+        full_path = f"{SORTED_ROOT}/Primary/{new_path}"
     encoded   = quote(full_path, safe="/")
     url = (f"https://graph.microsoft.com/v1.0/me/drive/root:{encoded}:"
            f"/thumbnails/0/large/content")
