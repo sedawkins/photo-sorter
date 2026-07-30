@@ -326,12 +326,15 @@ def save_ai_hint(conn: sqlite3.Connection,
 def search_photos(conn: sqlite3.Connection, query: str,
                   limit: int = 200, offset: int = 0) -> tuple[list[dict], int]:
     """Full-text search against ai_description. Returns (photos, total_count)."""
-    term = f"%{query.strip()}%"
+    # Match whole words only: replace commas with spaces, then search for
+    # space-padded term. "cat" matches tag "cat" but not "vacation" or "cathedral".
+    # "retriever" still matches "Labrador Retriever" (space-delimited word).
+    term = f"% {query.strip().lower()} %"
     total = conn.execute("""
         SELECT COUNT(*) FROM photos
         WHERE status = 'organized'
           AND ai_description IS NOT NULL
-          AND ai_description LIKE ?
+          AND ' ' || LOWER(REPLACE(ai_description, ',', ' ')) || ' ' LIKE ?
     """, (term,)).fetchone()[0]
     rows = conn.execute("""
         SELECT hash, filename, new_path, city, state_or_region, country,
@@ -339,7 +342,7 @@ def search_photos(conn: sqlite3.Connection, query: str,
         FROM photos
         WHERE status = 'organized'
           AND ai_description IS NOT NULL
-          AND ai_description LIKE ?
+          AND ' ' || LOWER(REPLACE(ai_description, ',', ' ')) || ' ' LIKE ?
         ORDER BY taken_date
         LIMIT ? OFFSET ?
     """, (term, limit, offset)).fetchall()
