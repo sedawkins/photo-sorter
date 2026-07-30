@@ -130,6 +130,7 @@ def run(year: str | None, path: str | None, limit: int | None, refill: bool):
     THUMB_DIR.mkdir(parents=True, exist_ok=True)
 
     where  = ["status = 'organized'", "new_path IS NOT NULL",
+               "new_path NOT LIKE 'Unsorted%'",
                "(media_type = 'photo' OR media_type IS NULL)"]
     params = []
     if not refill:
