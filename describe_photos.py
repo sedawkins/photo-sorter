@@ -87,6 +87,7 @@ def fetch_thumbnail(new_path: str, graph_client: GraphClient) -> bytes | None:
     except Exception:
         return None
     if not resp.ok:
+        logger.warning(f"    thumb HTTP {resp.status_code} for {new_path}")
         return None
     cache_file.write_bytes(resp.content)
     return resp.content
