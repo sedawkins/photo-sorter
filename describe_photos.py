@@ -66,7 +66,12 @@ yellow Labrador Retriever, beach, young woman, toddler, sunny, swimming pool
 
 
 def fetch_thumbnail(new_path: str, graph_client: GraphClient) -> bytes | None:
-    """Return JPEG thumbnail bytes from disk cache or OneDrive."""
+    """Return JPEG thumbnail bytes from disk cache or OneDrive.
+
+    Tries the thumbnail endpoint first. If OneDrive returns 404 (common for
+    older Nikon DSCN JPEGs), falls back to downloading the full image and
+    resizing it with Pillow before caching.
+    """
     cache_key  = hashlib.md5(new_path.encode()).hexdigest()
     cache_file = THUMB_DIR / f"{cache_key}.jpg"
     if cache_file.exists():
@@ -78,19 +83,45 @@ def fetch_thumbnail(new_path: str, graph_client: GraphClient) -> bytes | None:
         full_path = f"{SORTED_ROOT}/Unsorted/{rest}"
     else:
         full_path = f"{SORTED_ROOT}/Primary/{new_path}"
-    encoded   = quote(full_path, safe="/")
-    url = (f"https://graph.microsoft.com/v1.0/me/drive/root:{encoded}:"
-           f"/thumbnails/0/large/content")
-    # Use graph_client._session so token refresh is handled automatically
+    encoded = quote(full_path, safe="/")
+    base    = f"https://graph.microsoft.com/v1.0/me/drive/root:{encoded}:"
+
     try:
-        resp = graph_client._session.get(url, timeout=20)
+        resp = graph_client._session.get(base + "/thumbnails/0/large/content", timeout=20)
     except Exception:
         return None
-    if not resp.ok:
+
+    if resp.ok:
+        cache_file.write_bytes(resp.content)
+        return resp.content
+
+    if resp.status_code != 404:
         logger.warning(f"    thumb HTTP {resp.status_code} for {new_path}")
         return None
-    cache_file.write_bytes(resp.content)
-    return resp.content
+
+    # Thumbnail not available — download the full image and resize
+    try:
+        resp = graph_client._session.get(base + "/content", timeout=60)
+    except Exception:
+        return None
+
+    if not resp.ok:
+        logger.warning(f"    content HTTP {resp.status_code} for {new_path}")
+        return None
+
+    try:
+        import io
+        from PIL import Image
+        img = Image.open(io.BytesIO(resp.content)).convert("RGB")
+        img.thumbnail((1024, 1024))
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=75)
+        data = buf.getvalue()
+        cache_file.write_bytes(data)
+        return data
+    except Exception as exc:
+        logger.warning(f"    resize error for {new_path}: {exc}")
+        return None
 
 
 def describe_photo(thumb_bytes: bytes, client: anthropic.Anthropic) -> str | None:
