@@ -78,7 +78,10 @@ def fetch_thumbnail(new_path: str, graph_client: GraphClient) -> bytes | None:
     url = (f"https://graph.microsoft.com/v1.0/me/drive/root:{encoded}:"
            f"/thumbnails/0/large/content")
     # Use graph_client._session so token refresh is handled automatically
-    resp = graph_client._session.get(url, timeout=20)
+    try:
+        resp = graph_client._session.get(url, timeout=20)
+    except Exception:
+        return None
     if not resp.ok:
         return None
     cache_file.write_bytes(resp.content)
