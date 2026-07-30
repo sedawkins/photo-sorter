@@ -321,6 +321,31 @@ def save_ai_hint(conn: sqlite3.Connection,
     conn.commit()
 
 
+# ── Search ───────────────────────────────────────────────────────────────────
+
+def search_photos(conn: sqlite3.Connection, query: str,
+                  limit: int = 200, offset: int = 0) -> tuple[list[dict], int]:
+    """Full-text search against ai_description. Returns (photos, total_count)."""
+    term = f"%{query.strip()}%"
+    total = conn.execute("""
+        SELECT COUNT(*) FROM photos
+        WHERE status = 'organized'
+          AND ai_description IS NOT NULL
+          AND ai_description LIKE ?
+    """, (term,)).fetchone()[0]
+    rows = conn.execute("""
+        SELECT hash, filename, new_path, city, state_or_region, country,
+               taken_date, year, month, media_type, ai_description
+        FROM photos
+        WHERE status = 'organized'
+          AND ai_description IS NOT NULL
+          AND ai_description LIKE ?
+        ORDER BY taken_date
+        LIMIT ? OFFSET ?
+    """, (term, limit, offset)).fetchall()
+    return [dict(r) for r in rows], total
+
+
 # ── Thumbnail path helper ─────────────────────────────────────────────────────
 
 def onedrive_path_for_photo(photo: dict, sorted_root: str) -> str:

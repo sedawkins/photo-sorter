@@ -34,9 +34,10 @@ function thumbUrl(photoPath) {
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
-let currentView = "date";    // "date" | "location"
+let currentView = "date";    // "date" | "location" | "search"
 let dateStack = [];          // breadcrumb: [] | [year] | [year, month]
 let locationStack = [];      // [] | [country, city] | [country, city, year, month]
+let searchState = { q: "", offset: 0, total: 0 };
 
 // ── Nav ───────────────────────────────────────────────────────────────────────
 
@@ -55,6 +56,7 @@ function showView(view) {
   if (view === "date" && dateStack.length === 0) loadYears();
   if (view === "location" && locationStack.length === 0) loadLocations();
   if (view === "tag") loadClumps();
+  if (view === "search") setTimeout(() => document.getElementById("search-input").focus(), 50);
 }
 
 // ── Stats hero ────────────────────────────────────────────────────────────────
@@ -542,6 +544,85 @@ async function tagClump(e, i) {
   } catch (err) {
     alert("Tag failed: " + err.message);
   }
+}
+
+// ── Search view ───────────────────────────────────────────────────────────────
+
+async function doSearch() {
+  const q = document.getElementById("search-input").value.trim();
+  if (!q) return;
+  searchState = { q, offset: 0, total: 0 };
+  const el = document.getElementById("search-content");
+  el.innerHTML = `<div class="empty"><span class="spinner"></span>Searching…</div>`;
+  try {
+    const data = await api(`/api/search?q=${encodeURIComponent(q)}&limit=50&offset=0`);
+    searchState.total = data.total;
+    if (!data.photos.length) {
+      el.innerHTML = `<div class="empty">No photos found for "${esc(q)}".</div>`;
+      return;
+    }
+    el.innerHTML = renderSearchGroups(data.photos, data.total);
+    lazyLoadThumbs(el);
+    if (data.total > 50) {
+      el.insertAdjacentHTML("beforeend",
+        `<div class="search-more">
+           <span class="search-count">${data.total.toLocaleString()} total — showing first 50</span>
+           <button class="btn btn--secondary" onclick="loadMoreSearch()">Load more</button>
+         </div>`);
+    } else {
+      el.insertAdjacentHTML("beforeend",
+        `<div class="search-count">${data.total.toLocaleString()} photo${data.total !== 1 ? "s" : ""} found</div>`);
+    }
+  } catch (e) {
+    el.innerHTML = `<div class="empty">Search failed. Is the VM running?</div>`;
+  }
+}
+
+async function loadMoreSearch() {
+  const { q, total } = searchState;
+  searchState.offset += 50;
+  const el = document.getElementById("search-content");
+  const moreEl = el.querySelector(".search-more");
+  if (moreEl) moreEl.innerHTML = `<span class="spinner"></span>`;
+  try {
+    const data = await api(`/api/search?q=${encodeURIComponent(q)}&limit=50&offset=${searchState.offset}`);
+    if (moreEl) moreEl.remove();
+    const newHtml = renderSearchGroups(data.photos, 0);
+    el.insertAdjacentHTML("beforeend", newHtml);
+    lazyLoadThumbs(el);
+    const loaded = searchState.offset + data.photos.length;
+    if (loaded < total) {
+      el.insertAdjacentHTML("beforeend",
+        `<div class="search-more">
+           <span class="search-count">${loaded.toLocaleString()} of ${total.toLocaleString()}</span>
+           <button class="btn btn--secondary" onclick="loadMoreSearch()">Load more</button>
+         </div>`);
+    } else {
+      el.insertAdjacentHTML("beforeend",
+        `<div class="search-count">All ${total.toLocaleString()} photos loaded</div>`);
+    }
+  } catch (e) {
+    if (moreEl) moreEl.innerHTML = `<span style="color:red">Failed to load more.</span>`;
+  }
+}
+
+function renderSearchGroups(photos, total) {
+  if (!photos.length) return "";
+  const groups = {};
+  photos.forEach(p => {
+    const label = p.year || "Unknown";
+    if (!groups[label]) groups[label] = [];
+    groups[label].push(p);
+  });
+  return Object.keys(groups).map(year => `
+    <div class="location-group">
+      <div class="location-label">${year}</div>
+      <div class="photo-grid">${groups[year].map(p => `
+        <div class="photo-tile" data-path="${escAttr(p.new_path)}" onclick="openLightbox('${esc(p.new_path)}')">
+          <div class="loading">…</div>
+        </div>`).join("")}
+      </div>
+    </div>`).join("");
 }
 
 // ── Touch long-press overlay (iPhone) ────────────────────────────────────────

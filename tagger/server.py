@@ -25,6 +25,7 @@ from tagger.data import (
     get_locations, get_years_for_location, get_photos_by_location,
     onedrive_path_for_photo,
     get_clumps, get_clump_photos, tag_clump, trash_clump, save_ai_hint,
+    search_photos,
 )
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -233,6 +234,14 @@ def photo(path: str):
     resp.raise_for_status()
     content_type = resp.headers.get("content-type", "image/jpeg")
     return Response(content=resp.content, media_type=content_type)
+
+
+@app.get("/api/search", dependencies=[Depends(require_api_key)])
+def search(q: str = "", limit: int = 50, offset: int = 0, conn=Depends(get_db)):
+    if not q.strip():
+        raise HTTPException(status_code=400, detail="Query parameter 'q' is required")
+    photos, total = search_photos(conn, q, limit, offset)
+    return {"photos": photos, "total": total, "q": q, "offset": offset}
 
 
 @app.get("/api/health")

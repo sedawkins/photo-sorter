@@ -79,13 +79,13 @@
         </div>
         <span class="menu-badge">Coming later</span>
       </div>
-      <div class="menu-item menu-item--later">
+      <div class="menu-item" onclick="showView('search')">
         <span class="menu-icon">🔍</span>
         <div class="menu-text">
           <div class="menu-title">Search</div>
           <div class="menu-sub">Find photos by subject or keyword</div>
         </div>
-        <span class="menu-badge">Coming later</span>
+        <span class="menu-arrow">›</span>
       </div>
     </div>
   </div>
@@ -108,6 +108,19 @@
     <div id="tag-content">
       <div class="empty">Loading clumps…</div>
     </div>
+  </div>
+
+  <!-- ── Search view ───────────────────────────────────────────────────────── -->
+  <div class="view" id="view-search">
+    <div class="section-header" id="search-header">
+      <span class="section-title">Search Photos</span>
+    </div>
+    <div class="search-bar">
+      <input type="text" id="search-input" placeholder="e.g. retriever, beach, Christmas…"
+             autocomplete="off" onkeydown="if(event.key==='Enter')doSearch()">
+      <button class="btn btn--primary" onclick="doSearch()">Search</button>
+    </div>
+    <div id="search-content"></div>
   </div>
 
   <!-- ── Location view ──────────────────────────────────────────────────────── -->
