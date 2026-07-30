@@ -18,6 +18,9 @@ echo "[1/5] Installing system packages..."
 sudo apt-get update -qq
 sudo apt-get install -y -qq python3 python3-pip python3-venv git libheif-dev sqlite3
 
+# Set timezone to Pacific so cron jobs run at local time, not UTC
+sudo timedatectl set-timezone America/Los_Angeles
+
 # ── Repo ─────────────────────────────────────────────────────────────────────
 echo
 echo "[2/5] Cloning / updating repo..."
