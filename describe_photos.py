@@ -128,6 +128,7 @@ def fetch_thumbnail(new_path: str, graph_client: GraphClient) -> bytes | None:
 
 def describe_photo(thumb_bytes: bytes, client: anthropic.Anthropic) -> str | None:
     """Send thumbnail to Haiku, return comma-separated tag string."""
+    media_type = "image/png" if thumb_bytes[:4] == b"\x89PNG" else "image/jpeg"
     b64 = base64.standard_b64encode(thumb_bytes).decode()
     try:
         msg = client.messages.create(
@@ -137,7 +138,7 @@ def describe_photo(thumb_bytes: bytes, client: anthropic.Anthropic) -> str | Non
                 "role": "user",
                 "content": [
                     {"type": "image",
-                     "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}},
+                     "source": {"type": "base64", "media_type": media_type, "data": b64}},
                     {"type": "text", "text": PROMPT},
                 ],
             }],
