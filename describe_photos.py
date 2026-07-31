@@ -87,7 +87,8 @@ def fetch_thumbnail(new_path: str, graph_client: GraphClient) -> bytes | None:
     base    = f"https://graph.microsoft.com/v1.0/me/drive/root:{encoded}:"
 
     try:
-        resp = graph_client._session.get(base + "/thumbnails/0/large/content", timeout=20)
+        thumb_url = base + "/thumbnails/0/large/content"
+        resp = graph_client._retry(lambda: graph_client._session.get(thumb_url, timeout=20))
     except Exception:
         return None
 
@@ -101,7 +102,8 @@ def fetch_thumbnail(new_path: str, graph_client: GraphClient) -> bytes | None:
 
     # Thumbnail not available — download the full image and resize
     try:
-        resp = graph_client._session.get(base + "/content", timeout=60)
+        content_url = base + "/content"
+        resp = graph_client._retry(lambda: graph_client._session.get(content_url, timeout=60))
     except Exception:
         return None
 
