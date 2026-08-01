@@ -6,8 +6,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG="$SCRIPT_DIR/_system/runs/retag_cron.log"
 CANARY=/tmp/cron_retag_canary.log
 
-mkdir -p "$SCRIPT_DIR/_system/runs"
 echo "$(date '+%Y-%m-%d %H:%M:%S') — started SCRIPT_DIR=$SCRIPT_DIR" >> "$CANARY"
+mkdir -p "$SCRIPT_DIR/_system/runs"
 
 echo "" >> "$LOG"
 echo "========================================" >> "$LOG"
