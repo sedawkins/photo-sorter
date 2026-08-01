@@ -351,12 +351,17 @@ def clump_scan(body: ClumpScanRequest, conn=Depends(get_db)):
 
     prompt = (
         "You are helping to organize a family photo archive. "
-        "Look at these photos (all from the same camera session) and answer:\n"
-        "1. What LOCATION clues do you see? (landmarks, street signs, business names, "
-        "architecture, license plates, scenery, indoor/outdoor)\n"
-        "2. What are the main SUBJECTS? (people, pets, activities, events)\n"
-        "3. Your best LOCATION GUESS: city and country if possible, or region.\n\n"
-        "Be concise. Format: Location guess: [city, country]. Clues: [brief]. Subjects: [brief]."
+        "Look at these photos (all from the same camera session).\n"
+        "First, identify which single photo has the STRONGEST location clue — "
+        "a visible landmark, street sign, business name, license plate, or "
+        "distinctive architecture. Generic scenery (trees, sky, grass) is weak; "
+        "ignore it if a better clue photo exists. Base your location guess "
+        "primarily on the strongest-clue photo, not on averaging all photos.\n\n"
+        "Answer in this exact format:\n"
+        "Location guess: [city, country or region]\n"
+        "Strongest clue: [what clue and which photo # (1-based)]\n"
+        "Subjects: [people, pets, activities, events — brief]\n\n"
+        "Be concise. If no strong clue exists, say so in 'Strongest clue'."
     )
 
     client = anthropic.Anthropic(api_key=api_key)

@@ -193,7 +193,8 @@ def get_clumps(conn: sqlite3.Connection) -> list[dict]:
         WITH ordered AS (
             SELECT hash, new_path, taken_date, year, month,
                    COALESCE(camera_make, '') AS cam_make,
-                   COALESCE(camera_model, '') AS cam_model
+                   COALESCE(camera_model, '') AS cam_model,
+                   ai_location_hint
             FROM photos
             WHERE status = 'organized'
               AND city IS NULL
@@ -229,7 +230,8 @@ def get_clumps(conn: sqlite3.Connection) -> list[dict]:
             MIN(taken_date) AS start_date,
             MAX(taken_date) AS end_date,
             COUNT(*) AS photo_count,
-            GROUP_CONCAT(new_path, '||') AS all_paths
+            GROUP_CONCAT(new_path, '||') AS all_paths,
+            MAX(ai_location_hint) AS ai_location_hint
         FROM numbered
         GROUP BY cam_make, cam_model, clump_num
         ORDER BY start_date
@@ -243,6 +245,7 @@ def get_clumps(conn: sqlite3.Connection) -> list[dict]:
             **{k: r[k] for k in ("cam_make", "cam_model", "clump_num",
                                   "start_date", "end_date", "photo_count")},
             "sample_paths": paths[::step][:5],
+            "ai_hint": r["ai_location_hint"],
         })
     return _absorb_fringes(result)
 
