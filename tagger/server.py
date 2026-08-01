@@ -382,6 +382,6 @@ def clump_scan(body: ClumpScanRequest, conn=Depends(get_db)):
         hint = description.splitlines()[0] if description else ""
 
     save_ai_hint(conn, body.cam_make, body.cam_model,
-                 body.start_date, body.end_date, hint, description)
+                 body.start_date, body.end_date, hint)
 
     return {"hint": hint, "description": description}

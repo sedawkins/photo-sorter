@@ -309,18 +309,18 @@ def trash_clump(conn: sqlite3.Connection,
 def save_ai_hint(conn: sqlite3.Connection,
                  cam_make: str, cam_model: str,
                  start_date: str, end_date: str,
-                 hint: str, description: str):
+                 hint: str):
     """Cache AI scan results on all photos in the clump."""
     conn.execute("""
         UPDATE photos
-        SET ai_location_hint = ?, ai_description = ?
+        SET ai_location_hint = ?
         WHERE status = 'organized'
           AND city IS NULL AND tagged_city IS NULL
           AND taken_date IS NOT NULL
           AND COALESCE(camera_make, '') = ?
           AND COALESCE(camera_model, '') = ?
           AND taken_date >= ? AND taken_date <= ?
-    """, (hint, description, cam_make, cam_model, start_date, end_date))
+    """, (hint, cam_make, cam_model, start_date, end_date))
     conn.commit()
 
 
