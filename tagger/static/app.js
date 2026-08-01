@@ -427,8 +427,30 @@ function toggleScanSelect(e, btn, i, path) {
 }
 
 function selectClump(i) {
-  selectedClump = selectedClump === i ? null : i;
+  const closing = selectedClump === i;
+  selectedClump = closing ? null : i;
   renderClumpList();
+  if (!closing && !clumps[i].ai_hint) {
+    fetchAutoHint(i);
+  }
+}
+
+async function fetchAutoHint(i) {
+  const c = clumps[i];
+  const el = document.getElementById(`scan-result-${i}`);
+  if (!el) return;
+  el.innerHTML = `<div class="clump-hint" style="opacity:0.6">⏳ Checking tags for location clues…</div>`;
+  try {
+    const data = await api("/api/clumps/hint", {
+      method: "POST",
+      body: JSON.stringify({ cam_make: c.cam_make, cam_model: c.cam_model,
+                             start_date: c.start_date, end_date: c.end_date }),
+    });
+    clumps[i].ai_hint = data.hint;
+    if (el) el.innerHTML = `<div class="clump-hint">🏷️ <em style="font-size:11px;opacity:0.7">(from tags)</em><br>${esc(data.hint)}</div>`;
+  } catch (e) {
+    if (el) el.innerHTML = "";
+  }
 }
 
 function fmtDate(iso) {

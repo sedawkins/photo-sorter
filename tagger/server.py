@@ -292,6 +292,67 @@ def clump_trash(body: ClumpRef, conn=Depends(get_db)):
     return {"ok": True}
 
 
+@app.post("/api/clumps/hint", dependencies=[Depends(require_api_key)])
+def clump_hint(body: ClumpRef, conn=Depends(get_db)):
+    """Derive a location hint from existing ai_description tags (text-only, no image upload)."""
+    import anthropic
+
+    rows = conn.execute("""
+        SELECT ai_description FROM photos
+        WHERE status = 'organized'
+          AND city IS NULL AND tagged_city IS NULL
+          AND taken_date IS NOT NULL
+          AND COALESCE(camera_make, '') = ?
+          AND COALESCE(camera_model, '') = ?
+          AND taken_date >= ? AND taken_date <= ?
+          AND ai_description IS NOT NULL
+        ORDER BY taken_date
+    """, (body.cam_make, body.cam_model, body.start_date, body.end_date)).fetchall()
+
+    if not rows:
+        raise HTTPException(status_code=404, detail="No described photos in this clump")
+
+    tag_set: set[str] = set()
+    for row in rows:
+        for tag in row["ai_description"].split(","):
+            t = tag.strip()
+            if t:
+                tag_set.add(t.lower())
+    tags_str = ", ".join(sorted(tag_set))
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY not set on VM")
+
+    prompt = (
+        f"These tags were automatically generated from photos taken in a single camera session:\n"
+        f"{tags_str}\n\n"
+        "Based only on these tags, make your best guess at where these photos were taken. "
+        "Format exactly as:\n"
+        "Location guess: [city and country, or region, or activity type if no location is identifiable]\n"
+        "Confidence: [low/medium/high]\n\n"
+        "Low confidence is fine — a general region (e.g. 'ski resort, western US') or "
+        "activity type (e.g. 'indoor holiday gathering') is still helpful."
+    )
+
+    client = anthropic.Anthropic(api_key=api_key)
+    message = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=100,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    response = message.content[0].text.strip()
+
+    hint = response
+    for line in response.splitlines():
+        if "location guess" in line.lower():
+            hint = line.strip()
+            break
+
+    save_ai_hint(conn, body.cam_make, body.cam_model, body.start_date, body.end_date, hint)
+    return {"hint": hint}
+
+
 @app.post("/api/clumps/scan", dependencies=[Depends(require_api_key)])
 def clump_scan(body: ClumpScanRequest, conn=Depends(get_db)):
     """Fetch up to 5 sample thumbnails and ask Claude Haiku for location hints."""
