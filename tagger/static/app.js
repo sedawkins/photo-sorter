@@ -391,7 +391,9 @@ function renderClumpList() {
 }
 
 function renderClumpDetail(c, i) {
-  const hint = c.ai_hint ? `<div class="clump-hint">🤖 ${esc(c.ai_hint)}</div>` : "";
+  const hint = c.ai_hint
+    ? `<div class="clump-hint">🤖 ${esc(c.ai_hint)} <button class="btn btn--sm btn--secondary" onclick="fillFromHint(${i})">↓ Fill</button></div>`
+    : "";
   return `
     <div class="clump-detail" onclick="event.stopPropagation()">
       ${hint}
@@ -401,7 +403,7 @@ function renderClumpDetail(c, i) {
         <button class="btn btn--danger" onclick="trashClump(event, ${i})">🗑️ Trash clump</button>
       </div>
       <div class="clump-tag-form">
-        <input class="tag-input" id="tag-city-${i}" type="text" placeholder="City" autocomplete="off">
+        <input class="tag-input" id="tag-city-${i}" type="text" placeholder="City" autocomplete="off" onblur="expandCityShortcut(${i})">
         <input class="tag-input" id="tag-country-${i}" type="text" placeholder="State or Country" autocomplete="off">
         <button class="btn btn--primary" onclick="tagClump(event, ${i})">✓ Tag clump</button>
       </div>
@@ -426,6 +428,39 @@ function toggleScanSelect(e, btn, i, path) {
   });
 }
 
+const CITY_SHORTCUTS = {
+  'sj': { city: 'San Jose', state: 'California' },
+};
+
+function expandCityShortcut(i) {
+  const cityEl = document.getElementById(`tag-city-${i}`);
+  const stateEl = document.getElementById(`tag-country-${i}`);
+  if (!cityEl) return;
+  const shortcut = CITY_SHORTCUTS[cityEl.value.trim().toLowerCase()];
+  if (!shortcut) return;
+  cityEl.value = shortcut.city;
+  if (stateEl && !stateEl.value.trim()) stateEl.value = shortcut.state;
+}
+
+function fillFromHint(i) {
+  const hint = clumps[i].ai_hint || '';
+  const match = hint.match(/Location guess:\s*(.+)/i);
+  const location = (match ? match[1] : hint).trim();
+  const commaIdx = location.indexOf(',');
+  let city, state;
+  if (commaIdx >= 0) {
+    city = location.slice(0, commaIdx).trim();
+    state = location.slice(commaIdx + 1).replace(/\s*\(.*?\)\s*/g, '').trim();
+  } else {
+    city = location;
+    state = '';
+  }
+  const cityEl = document.getElementById(`tag-city-${i}`);
+  const stateEl = document.getElementById(`tag-country-${i}`);
+  if (cityEl) { cityEl.value = city; cityEl.focus(); }
+  if (stateEl && state) stateEl.value = state;
+}
+
 function selectClump(i) {
   const closing = selectedClump === i;
   selectedClump = closing ? null : i;
@@ -447,7 +482,7 @@ async function fetchAutoHint(i) {
                              start_date: c.start_date, end_date: c.end_date }),
     });
     clumps[i].ai_hint = data.hint;
-    if (el) el.innerHTML = `<div class="clump-hint">🏷️ <em style="font-size:11px;opacity:0.7">(from tags)</em><br>${esc(data.hint)}</div>`;
+    if (el) el.innerHTML = `<div class="clump-hint">🏷️ <em style="font-size:11px;opacity:0.7">(from tags)</em><br>${esc(data.hint)} <button class="btn btn--sm btn--secondary" onclick="fillFromHint(${i})">↓ Fill</button></div>`;
   } catch (e) {
     if (el) el.innerHTML = "";
   }
@@ -497,7 +532,7 @@ async function scanClump(e, i) {
     });
     clumps[i].ai_hint = data.hint;
     const scope = selected.length ? `${selected.length} selected photo${selected.length > 1 ? "s" : ""}` : `all ${c.photo_count} photos`;
-    result.innerHTML = `<div class="clump-hint">🤖 <em style="font-size:11px;opacity:0.7">(scanned ${scope})</em><br>${esc(data.description)}</div>`;
+    result.innerHTML = `<div class="clump-hint">🤖 <em style="font-size:11px;opacity:0.7">(scanned ${scope})</em><br>${esc(data.description)}<br><button class="btn btn--sm btn--secondary" onclick="fillFromHint(${i})">↓ Fill city & state</button></div>`;
     btn.disabled = false;
     btn.textContent = "🔍 Scan again";
   } catch (err) {
@@ -539,7 +574,8 @@ async function loadClumpPhotos(e, i) {
     lazyLoadThumbs(container);
     btn.disabled = false;
     btn.textContent = "📷 Hide photos";
-    container.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    const clumpRow = btn.closest('.clump-row');
+    if (clumpRow) clumpRow.scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (err) {
     btn.disabled = false;
     btn.textContent = `📷 View all ${c.photo_count} photos`;

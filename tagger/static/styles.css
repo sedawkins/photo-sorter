@@ -531,6 +531,7 @@ main {
 .btn:disabled  { opacity: 0.5; cursor: not-allowed; }
 .btn--secondary:hover { background: var(--border); }
 .btn--danger:hover    { background: #fff0f0; }
+.btn--sm { padding: 2px 8px; font-size: 11px; vertical-align: middle; }
 
 /* ── Search view ───────────────────────────────────────────────────────────── */
 
